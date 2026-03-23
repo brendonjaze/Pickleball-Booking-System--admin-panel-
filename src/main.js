@@ -371,7 +371,6 @@ function renderApp() {
     <div id="admin-app">
       <header class="admin-header">
         <div class="header-brand">
-          <span class="icon">🏓</span>
           Glan Pickleball Community
         </div>
         <div class="header-right">
