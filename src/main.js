@@ -172,13 +172,14 @@ function todayStr() {
 function updateDashboard(bookings) {
   const today = todayStr();
   const todayBookings = bookings.filter(b => b.date === today);
+  const todayGrouped = groupBookingsByRef(todayBookings);
 
-  document.getElementById('stat-total').textContent = todayBookings.length;
+  document.getElementById('stat-total').textContent = todayGrouped.length;
   document.getElementById('stat-revenue').textContent =
     `₱${(todayBookings.length * RATE_PER_HOUR).toLocaleString()}`;
 
   [1, 2, 3].forEach(c => {
-    const count = todayBookings.filter(b => b.court_id === c).length;
+    const count = todayGrouped.filter(b => b.court_id === c).length;
     document.getElementById(`stat-court${c}`).textContent = count;
   });
 }
