@@ -79,18 +79,76 @@ async function sbFetch(path, options = {}) {
 }
 
 async function fetchAllBookings() {
-  return sbFetch('bookings?select=*&order=created_at.desc');
+  return sbFetch('bookings?select=*&order=date.asc,time_slot.asc');
 }
 
-async function deleteBooking(id) {
-  return sbFetch(`bookings?id=eq.${id}`, { method: 'DELETE' });
+async function deleteBookingGroup(bookingRef) {
+  return sbFetch(`bookings?booking_ref=eq.${encodeURIComponent(bookingRef)}`, { method: 'DELETE' });
+}
+
+// ─── TIME HELPERS ─────────────────────────────────────────────────────────────
+
+function parseTimeToMinutes(timeStr) {
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (!match) return 0;
+  let hours = parseInt(match[1]);
+  const minutes = parseInt(match[2]);
+  const period = match[3]?.toUpperCase();
+  if (period === 'PM' && hours !== 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+  return hours * 60 + minutes;
+}
+
+function addOneHour(timeStr) {
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if (!match) return timeStr;
+  const minutes = match[2];
+  const period = match[3]?.toUpperCase();
+  let hours = parseInt(match[1]);
+  let totalHours = hours;
+  if (period === 'PM' && hours !== 12) totalHours += 12;
+  if (period === 'AM' && hours === 12) totalHours = 0;
+  totalHours += 1;
+  if (period) {
+    const newPeriod = totalHours >= 12 ? 'PM' : 'AM';
+    const newHours = totalHours % 12 || 12;
+    return `${newHours}:${minutes} ${newPeriod}`;
+  }
+  return `${String(totalHours).padStart(2, '0')}:${minutes}`;
+}
+
+function groupBookingsByRef(bookings) {
+  const groups = {};
+  for (const b of bookings) {
+    const ref = b.booking_ref;
+    if (!groups[ref]) {
+      groups[ref] = {
+        booking_ref: ref,
+        name: b.name,
+        phone: b.phone,
+        court_id: b.court_id,
+        date: b.date,
+        payment_method: b.payment_method,
+        created_at: b.created_at,
+        slots: [],
+      };
+    }
+    groups[ref].slots.push(b.time_slot);
+  }
+  return Object.values(groups).map(g => {
+    const sorted = g.slots.sort((a, b) => parseTimeToMinutes(a) - parseTimeToMinutes(b));
+    return {
+      ...g,
+      time_range: `${sorted[0]} – ${addOneHour(sorted[sorted.length - 1])}`,
+      total_hours: sorted.length,
+    };
+  });
 }
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 
 let allBookings = [];
-let filteredBookings = [];
-let pendingDeleteId = null;
+let pendingDeleteRef = null;
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
 
@@ -137,16 +195,16 @@ function paymentBadge(method) {
   return `<span class="payment-badge ${cls}">${icon} ${method}</span>`;
 }
 
-function renderTable(bookings) {
+function renderTable(grouped) {
   const tbody = document.getElementById('bookings-tbody');
   const count = document.getElementById('bookings-count');
 
-  count.textContent = `${bookings.length} booking${bookings.length !== 1 ? 's' : ''}`;
+  count.textContent = `${grouped.length} booking${grouped.length !== 1 ? 's' : ''}`;
 
-  if (bookings.length === 0) {
+  if (grouped.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7">
+        <td colspan="8">
           <div class="table-empty">
             <div class="icon">📭</div>
             <p>No bookings found</p>
@@ -156,22 +214,23 @@ function renderTable(bookings) {
     return;
   }
 
-  tbody.innerHTML = bookings.map(b => `
+  tbody.innerHTML = grouped.map(b => `
     <tr>
+      <td data-label="Name">${b.name || '—'}</td>
+      <td data-label="Phone">${b.phone}</td>
       <td data-label="Court">${courtBadge(b.court_id)}</td>
       <td data-label="Date">${b.date}</td>
-      <td data-label="Time">${b.time_slot}</td>
-      <td data-label="Phone">${b.phone}</td>
+      <td data-label="Time">${b.time_range}</td>
+      <td data-label="Hours">${b.total_hours}h</td>
       <td data-label="Payment">${paymentBadge(b.payment_method)}</td>
-      <td data-label="Booked At">${new Date(b.created_at).toLocaleString('en-PH', { dateStyle: 'short', timeStyle: 'short' })}</td>
       <td>
-        <button class="btn-delete" data-id="${b.id}">Cancel Booking</button>
+        <button class="btn-delete" data-ref="${b.booking_ref}">Cancel Booking</button>
       </td>
     </tr>
   `).join('');
 
   tbody.querySelectorAll('.btn-delete').forEach(btn => {
-    btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+    btn.addEventListener('click', () => openDeleteModal(btn.dataset.ref));
   });
 }
 
@@ -181,35 +240,35 @@ function applyFilters() {
   const date = document.getElementById('filter-date').value;
   const court = document.getElementById('filter-court').value;
 
-  filteredBookings = allBookings.filter(b => {
+  const filtered = allBookings.filter(b => {
     if (date && b.date !== date) return false;
     if (court && String(b.court_id) !== court) return false;
     return true;
   });
 
-  renderTable(filteredBookings);
+  renderTable(groupBookingsByRef(filtered));
 }
 
 // ─── DELETE MODAL ─────────────────────────────────────────────────────────────
 
-function openDeleteModal(id) {
-  pendingDeleteId = id;
+function openDeleteModal(ref) {
+  pendingDeleteRef = ref;
   document.getElementById('delete-modal').classList.add('show');
 }
 
 function closeDeleteModal() {
-  pendingDeleteId = null;
+  pendingDeleteRef = null;
   document.getElementById('delete-modal').classList.remove('show');
 }
 
 async function confirmDelete() {
-  if (!pendingDeleteId) return;
-  const id = pendingDeleteId;
+  if (!pendingDeleteRef) return;
+  const ref = pendingDeleteRef;
   closeDeleteModal();
 
   try {
-    await deleteBooking(id);
-    allBookings = allBookings.filter(b => b.id !== id);
+    await deleteBookingGroup(ref);
+    allBookings = allBookings.filter(b => b.booking_ref !== ref);
     applyFilters();
     updateDashboard(allBookings);
     showToast('Booking cancelled successfully.');
@@ -225,7 +284,7 @@ async function loadBookings() {
   const tbody = document.getElementById('bookings-tbody');
   tbody.innerHTML = `
     <tr>
-      <td colspan="7">
+      <td colspan="8">
         <div class="loading-spinner">
           <div class="spinner"></div>
           Loading bookings…
@@ -240,7 +299,7 @@ async function loadBookings() {
   } catch (e) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7">
+        <td colspan="8">
           <div class="table-empty">
             <div class="icon">⚠️</div>
             <p>Failed to load bookings. Check your connection.</p>
@@ -379,12 +438,13 @@ function renderApp() {
             <table>
               <thead>
                 <tr>
+                  <th>Name</th>
+                  <th>Phone</th>
                   <th>Court</th>
                   <th>Date</th>
-                  <th>Time Slot</th>
-                  <th>Phone</th>
+                  <th>Time Range</th>
+                  <th>Hours</th>
                   <th>Payment</th>
-                  <th>Booked At</th>
                   <th>Action</th>
                 </tr>
               </thead>
