@@ -267,7 +267,10 @@ async function confirmDelete() {
   closeDeleteModal();
 
   try {
-    await deleteBookingGroup(ref);
+    const deleted = await deleteBookingGroup(ref);
+    if (!deleted || deleted.length === 0) {
+      throw new Error('Booking could not be deleted. Check Supabase RLS policies.');
+    }
     allBookings = allBookings.filter(b => b.booking_ref !== ref);
     applyFilters();
     updateDashboard(allBookings);
