@@ -335,7 +335,6 @@ function renderApp() {
     <!-- Login -->
     <div id="login-screen" style="display:flex">
       <div class="login-card">
-        <div class="login-logo">🏓</div>
         <h1>Glan Pickleball<br>Community</h1>
         <p>Admin Panel — Sign in to continue</p>
         <form id="login-form" autocomplete="off">
