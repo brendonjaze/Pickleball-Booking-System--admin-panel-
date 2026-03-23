@@ -99,7 +99,7 @@ async function updateAuthUser(data) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `HTTP ${res.status}`);
+    throw new Error(err.msg || err.message || err.error_description || `HTTP ${res.status}`);
   }
   return res.json();
 }
@@ -354,25 +354,13 @@ function logout() {
 
 function openAccountModal() {
   document.getElementById('account-modal').classList.add('show');
-  switchAccountTab('password');
   document.getElementById('new-password').value = '';
   document.getElementById('confirm-password').value = '';
-  document.getElementById('new-email').value = '';
   document.getElementById('account-password-error').textContent = '';
-  document.getElementById('account-email-error').textContent = '';
 }
 
 function closeAccountModal() {
   document.getElementById('account-modal').classList.remove('show');
-}
-
-function switchAccountTab(tab) {
-  document.querySelectorAll('.account-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
-  });
-  document.querySelectorAll('.account-tab-panel').forEach(panel => {
-    panel.classList.toggle('hidden', panel.id !== `tab-${tab}`);
-  });
 }
 
 async function handleChangePassword() {
@@ -407,32 +395,6 @@ async function handleChangePassword() {
   }
 }
 
-async function handleChangeEmail() {
-  const newEmail = document.getElementById('new-email').value.trim();
-  const errEl = document.getElementById('account-email-error');
-  const btn = document.getElementById('btn-change-email');
-
-  errEl.textContent = '';
-
-  if (!newEmail || !newEmail.includes('@')) {
-    errEl.textContent = 'Please enter a valid email address.';
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'Updating…';
-
-  try {
-    await updateAuthUser({ email: newEmail });
-    closeAccountModal();
-    showToast('Email updated. Check your new inbox to confirm the change.');
-  } catch (e) {
-    errEl.textContent = e.message || 'Failed to update email.';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Update Email';
-  }
-}
 
 // ─── RENDER APP ───────────────────────────────────────────────────────────────
 
@@ -564,12 +526,8 @@ function renderApp() {
     <div class="modal-overlay" id="account-modal">
       <div class="modal-card account-modal-card">
         <div class="account-modal-header">
-          <h2>Account Settings</h2>
+          <h2>Change Password</h2>
           <button class="modal-close" id="account-modal-close">&times;</button>
-        </div>
-        <div class="account-tabs">
-          <button class="account-tab active" data-tab="password">Change Password</button>
-          <button class="account-tab" data-tab="email">Change Email</button>
         </div>
 
         <div class="account-tab-panel" id="tab-password">
@@ -583,16 +541,6 @@ function renderApp() {
           </div>
           <div class="form-error" id="account-password-error"></div>
           <button class="btn-primary" id="btn-change-password">Update Password</button>
-        </div>
-
-        <div class="account-tab-panel hidden" id="tab-email">
-          <div class="input-group">
-            <label for="new-email">New Email Address</label>
-            <input type="email" id="new-email" placeholder="Enter new email" autocomplete="email" />
-          </div>
-          <div class="form-error" id="account-email-error"></div>
-          <p class="form-note">A confirmation link will be sent to the new email address.</p>
-          <button class="btn-primary" id="btn-change-email">Update Email</button>
         </div>
       </div>
     </div>
@@ -646,11 +594,7 @@ function renderApp() {
   document.getElementById('account-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeAccountModal();
   });
-  document.querySelectorAll('.account-tab').forEach(btn => {
-    btn.addEventListener('click', () => switchAccountTab(btn.dataset.tab));
-  });
   document.getElementById('btn-change-password').addEventListener('click', handleChangePassword);
-  document.getElementById('btn-change-email').addEventListener('click', handleChangeEmail);
 
   // Filters
   document.getElementById('filter-date').addEventListener('change', applyFilters);
