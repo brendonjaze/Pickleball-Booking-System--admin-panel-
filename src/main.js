@@ -86,6 +86,24 @@ async function deleteBookingGroup(bookingRef) {
   return sbFetch(`bookings?booking_ref=eq.${encodeURIComponent(bookingRef)}`, { method: 'DELETE' });
 }
 
+async function updateAuthUser(data) {
+  const token = getToken();
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    method: 'PUT',
+    headers: {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 // ─── TIME HELPERS ─────────────────────────────────────────────────────────────
 
 function parseTimeToMinutes(timeStr) {
@@ -332,6 +350,90 @@ function logout() {
   document.getElementById('login-error').classList.remove('show');
 }
 
+// ─── ACCOUNT MODAL ────────────────────────────────────────────────────────────
+
+function openAccountModal() {
+  document.getElementById('account-modal').classList.add('show');
+  switchAccountTab('password');
+  document.getElementById('new-password').value = '';
+  document.getElementById('confirm-password').value = '';
+  document.getElementById('new-email').value = '';
+  document.getElementById('account-password-error').textContent = '';
+  document.getElementById('account-email-error').textContent = '';
+}
+
+function closeAccountModal() {
+  document.getElementById('account-modal').classList.remove('show');
+}
+
+function switchAccountTab(tab) {
+  document.querySelectorAll('.account-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  document.querySelectorAll('.account-tab-panel').forEach(panel => {
+    panel.classList.toggle('hidden', panel.id !== `tab-${tab}`);
+  });
+}
+
+async function handleChangePassword() {
+  const newPass = document.getElementById('new-password').value;
+  const confirmPass = document.getElementById('confirm-password').value;
+  const errEl = document.getElementById('account-password-error');
+  const btn = document.getElementById('btn-change-password');
+
+  errEl.textContent = '';
+
+  if (newPass.length < 6) {
+    errEl.textContent = 'Password must be at least 6 characters.';
+    return;
+  }
+  if (newPass !== confirmPass) {
+    errEl.textContent = 'Passwords do not match.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Updating…';
+
+  try {
+    await updateAuthUser({ password: newPass });
+    closeAccountModal();
+    showToast('Password updated successfully.');
+  } catch (e) {
+    errEl.textContent = e.message || 'Failed to update password.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Update Password';
+  }
+}
+
+async function handleChangeEmail() {
+  const newEmail = document.getElementById('new-email').value.trim();
+  const errEl = document.getElementById('account-email-error');
+  const btn = document.getElementById('btn-change-email');
+
+  errEl.textContent = '';
+
+  if (!newEmail || !newEmail.includes('@')) {
+    errEl.textContent = 'Please enter a valid email address.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Updating…';
+
+  try {
+    await updateAuthUser({ email: newEmail });
+    closeAccountModal();
+    showToast('Email updated. Check your new inbox to confirm the change.');
+  } catch (e) {
+    errEl.textContent = e.message || 'Failed to update email.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Update Email';
+  }
+}
+
 // ─── RENDER APP ───────────────────────────────────────────────────────────────
 
 function renderApp() {
@@ -376,6 +478,7 @@ function renderApp() {
         </div>
         <div class="header-right">
           <span class="header-badge">Admin Panel</span>
+          <button class="btn-account" id="btn-account">Account</button>
           <button class="btn-logout" id="btn-logout">Sign Out</button>
         </div>
       </header>
@@ -457,6 +560,43 @@ function renderApp() {
       </main>
     </div>
 
+    <!-- Account Settings Modal -->
+    <div class="modal-overlay" id="account-modal">
+      <div class="modal-card account-modal-card">
+        <div class="account-modal-header">
+          <h2>Account Settings</h2>
+          <button class="modal-close" id="account-modal-close">&times;</button>
+        </div>
+        <div class="account-tabs">
+          <button class="account-tab active" data-tab="password">Change Password</button>
+          <button class="account-tab" data-tab="email">Change Email</button>
+        </div>
+
+        <div class="account-tab-panel" id="tab-password">
+          <div class="input-group">
+            <label for="new-password">New Password</label>
+            <input type="password" id="new-password" placeholder="At least 6 characters" autocomplete="new-password" />
+          </div>
+          <div class="input-group">
+            <label for="confirm-password">Confirm Password</label>
+            <input type="password" id="confirm-password" placeholder="Re-enter new password" autocomplete="new-password" />
+          </div>
+          <div class="form-error" id="account-password-error"></div>
+          <button class="btn-primary" id="btn-change-password">Update Password</button>
+        </div>
+
+        <div class="account-tab-panel hidden" id="tab-email">
+          <div class="input-group">
+            <label for="new-email">New Email Address</label>
+            <input type="email" id="new-email" placeholder="Enter new email" autocomplete="email" />
+          </div>
+          <div class="form-error" id="account-email-error"></div>
+          <p class="form-note">A confirmation link will be sent to the new email address.</p>
+          <button class="btn-primary" id="btn-change-email">Update Email</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Delete Confirm Modal -->
     <div class="modal-overlay" id="delete-modal">
       <div class="modal-card">
@@ -499,6 +639,18 @@ function renderApp() {
 
   // Logout
   document.getElementById('btn-logout').addEventListener('click', logout);
+
+  // Account modal
+  document.getElementById('btn-account').addEventListener('click', openAccountModal);
+  document.getElementById('account-modal-close').addEventListener('click', closeAccountModal);
+  document.getElementById('account-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeAccountModal();
+  });
+  document.querySelectorAll('.account-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchAccountTab(btn.dataset.tab));
+  });
+  document.getElementById('btn-change-password').addEventListener('click', handleChangePassword);
+  document.getElementById('btn-change-email').addEventListener('click', handleChangeEmail);
 
   // Filters
   document.getElementById('filter-date').addEventListener('change', applyFilters);
