@@ -12,7 +12,7 @@ const COURT_NAMES = { 1: 'Court 1', 2: 'Court 2', 3: 'Court 3' };
 // ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
 
 function getToken() {
-  return sessionStorage.getItem(SESSION_KEY);
+  return localStorage.getItem(SESSION_KEY);
 }
 
 async function signIn(email, password) {
@@ -28,7 +28,7 @@ async function signIn(email, password) {
   if (!res.ok) throw new Error('Invalid credentials');
 
   const { access_token } = await res.json();
-  sessionStorage.setItem(SESSION_KEY, access_token);
+  localStorage.setItem(SESSION_KEY, access_token);
   return access_token;
 }
 
@@ -43,7 +43,7 @@ async function signOut() {
       },
     }).catch(() => {});
   }
-  sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(SESSION_KEY);
 }
 
 // ─── SUPABASE HELPERS ─────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ async function sbFetch(path, options = {}) {
 
   if (res.status === 401) {
     // Token expired — force re-login
-    sessionStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY);
     logout();
     throw new Error('Session expired. Please sign in again.');
   }
@@ -578,7 +578,13 @@ function renderApp() {
       await signIn(email, password);
       showAdmin();
     } catch {
-      errEl.classList.add('show');
+      // If offline and a previous session exists, allow entry
+      if (!navigator.onLine && getToken()) {
+        showAdmin();
+        showToast('You are offline. Showing cached session.', true);
+      } else {
+        errEl.classList.add('show');
+      }
     } finally {
       btn.disabled = false;
       btn.textContent = 'Sign In';
