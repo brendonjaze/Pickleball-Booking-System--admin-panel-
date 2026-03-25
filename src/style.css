@@ -784,10 +784,7 @@ tbody td {
     flex-shrink: 0;
   }
 
-  /* Hide "Booked At" column on mobile to save space */
-  tbody td:nth-child(6) {
-    display: none;
-  }
+  /* Hours column — show it on mobile */
 
   /* Remove fixed min-width and horizontal scroll — we use card layout */
   .table-wrapper {
