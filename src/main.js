@@ -155,9 +155,14 @@ function groupBookingsByRef(bookings) {
   }
   return Object.values(groups).map(g => {
     const sorted = g.slots.sort((a, b) => parseTimeToMinutes(a) - parseTimeToMinutes(b));
+    // Each slot may be stored as a range "6:00 AM – 7:00 AM"; extract start/end parts
+    const firstStart = sorted[0].split('–')[0].trim();
+    const lastEnd = sorted[sorted.length - 1].includes('–')
+      ? sorted[sorted.length - 1].split('–')[1].trim()
+      : addOneHour(sorted[sorted.length - 1]);
     return {
       ...g,
-      time_range: `${sorted[0]} – ${addOneHour(sorted[sorted.length - 1])}`,
+      time_range: `${firstStart} – ${lastEnd}`,
       total_hours: sorted.length,
     };
   });
