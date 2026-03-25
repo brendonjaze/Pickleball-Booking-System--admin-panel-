@@ -86,6 +86,24 @@ async function deleteBookingGroup(bookingRef) {
   return sbFetch(`bookings?booking_ref=eq.${encodeURIComponent(bookingRef)}`, { method: 'DELETE' });
 }
 
+async function cleanUpOldBookings() {
+  const today = todayStr();
+  const old = allBookings.filter(b => b.date < today);
+  if (old.length === 0) return;
+
+  const oldRefs = [...new Set(old.map(b => b.booking_ref))];
+
+  try {
+    await sbFetch(`bookings?date=lt.${today}`, { method: 'DELETE' });
+    allBookings = allBookings.filter(b => b.date >= today);
+    applyFilters();
+    updateDashboard(allBookings);
+    showToast(`Cleaned up ${oldRefs.length} past booking${oldRefs.length !== 1 ? 's' : ''} (${old.length} slot${old.length !== 1 ? 's' : ''}).`, false, 7000);
+  } catch (e) {
+    console.error('Cleanup failed:', e);
+  }
+}
+
 async function updateAuthUser(data) {
   const token = getToken();
   const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
@@ -175,13 +193,13 @@ let pendingDeleteRef = null;
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
 
-function showToast(message, isError = false) {
+function showToast(message, isError = false, duration = 3500) {
   const container = document.querySelector('.toast-container');
   const toast = document.createElement('div');
   toast.className = `toast${isError ? ' error' : ''}`;
   toast.textContent = message;
   container.appendChild(toast);
-  setTimeout(() => toast.remove(), 3500);
+  setTimeout(() => toast.remove(), duration);
 }
 
 // ─── DATE HELPERS ─────────────────────────────────────────────────────────────
@@ -323,6 +341,7 @@ async function loadBookings() {
     allBookings = await fetchAllBookings();
     applyFilters();
     updateDashboard(allBookings);
+    await cleanUpOldBookings();
   } catch (e) {
     tbody.innerHTML = `
       <tr>
