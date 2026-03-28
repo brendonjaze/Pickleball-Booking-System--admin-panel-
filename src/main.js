@@ -553,7 +553,6 @@ function renderApp() {
     <!-- Login -->
     <div id="login-screen" style="display:flex">
       <div class="login-card">
-        <span class="login-brand-icon">🏓</span>
         <h1>Glan Pickleball<br>Community</h1>
         <p>Admin Panel — Sign in to continue</p>
         <form id="login-form" autocomplete="off">
@@ -587,7 +586,6 @@ function renderApp() {
     <div id="admin-app">
       <header class="admin-header">
         <div class="header-brand">
-          <span class="brand-icon">🏓</span>
           Glan Pickleball Community
         </div>
         <div class="header-right">
@@ -601,10 +599,14 @@ function renderApp() {
         <!-- Tab Navigation -->
         <div class="tab-nav">
           <button class="tab-btn active" data-tab="bookings">
+            <span class="tab-icon">📋</span>
             Bookings
             <span class="tab-badge" id="tab-bookings-badge">0</span>
           </button>
-          <button class="tab-btn" data-tab="revenue">Revenue</button>
+          <button class="tab-btn" data-tab="revenue">
+            <span class="tab-icon">💰</span>
+            Revenue
+          </button>
         </div>
 
         <!-- ═══ BOOKINGS TAB ═══ -->
