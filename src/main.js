@@ -681,17 +681,16 @@ async function saveAnnouncement() {
 
 // ─── COURT LOCK LOGIC ────────────────────────────────────────────────────────
 
-const LOCK_TIME_SLOTS = [];
-(() => {
-  for (let h = 6; h <= 21; h++) {
-    const period = h >= 12 ? 'PM' : 'AM';
-    const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
-    const nextH = h + 1;
-    const nextPeriod = nextH >= 12 ? 'PM' : 'AM';
-    const displayNextH = nextH > 12 ? nextH - 12 : nextH === 0 ? 12 : nextH;
-    LOCK_TIME_SLOTS.push(`${displayH}:00 ${period} – ${displayNextH}:00 ${nextPeriod}`);
-  }
-})();
+const LOCK_TIME_SLOTS = [
+  '4:00 PM – 5:00 PM',
+  '5:00 PM – 6:00 PM',
+  '6:00 PM – 7:00 PM',
+  '7:00 PM – 8:00 PM',
+  '8:00 PM – 9:00 PM',
+  '9:00 PM – 10:00 PM',
+  '10:00 PM – 11:00 PM',
+  '11:00 PM – 12:00 AM',
+];
 
 function renderLockCalendar() {
   const container = document.getElementById('lock-cal-days');
