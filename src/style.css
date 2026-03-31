@@ -600,6 +600,25 @@ html, body {
   color: #b0b8c4;
 }
 
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  padding-bottom: 0.15rem;
+}
+
+.filter-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
 .btn-reset {
   background: var(--bg);
   color: var(--primary);
@@ -1149,6 +1168,424 @@ tbody td {
   color: var(--text-muted);
 }
 
+/* ─── ANNOUNCEMENT EDITOR ─────────────────────────────── */
+
+.section-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+  line-height: 1.5;
+}
+
+.announcement-editor {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-xs);
+  border: 1px solid var(--border-light);
+}
+
+.announcement-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.announcement-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.announcement-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-slider {
+  width: 42px;
+  height: 24px;
+  background: var(--border);
+  border-radius: 12px;
+  position: relative;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+
+.toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--white);
+  transition: transform var(--transition);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+.announcement-toggle input:checked + .toggle-slider {
+  background: var(--primary);
+}
+
+.announcement-toggle input:checked + .toggle-slider::after {
+  transform: translateX(18px);
+}
+
+.toggle-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.announcement-status {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.announcement-editor .input-group {
+  margin-bottom: 1rem;
+}
+
+.announcement-editor textarea {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.announcement-editor textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--white);
+  box-shadow: 0 0 0 3px rgba(30, 92, 69, 0.08);
+}
+
+.announcement-preview {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: #fef2f2;
+  border: 1.5px solid #fecaca;
+  border-left: 4px solid var(--danger);
+  border-radius: var(--radius-sm);
+}
+
+.announcement-preview-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.announcement-preview-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--danger);
+  margin-bottom: 0.3rem;
+}
+
+.announcement-preview-content {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--danger);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.announcement-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ─── COURT LOCK ──────────────────────────────────────── */
+
+.lock-editor {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-xs);
+  border: 1px solid var(--border-light);
+}
+
+.lock-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.lock-panel {
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 1.25rem;
+  border: 1px solid var(--border-light);
+}
+
+.lock-panel-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  margin-bottom: 1rem;
+}
+
+/* Calendar */
+.lock-calendar {
+  user-select: none;
+}
+
+.lock-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.lock-cal-month {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.lock-cal-nav {
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xs);
+  width: 32px;
+  height: 32px;
+  font-size: 1.2rem;
+  color: var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+  font-family: 'Montserrat', sans-serif;
+}
+
+.lock-cal-nav:hover {
+  background: var(--accent);
+  border-color: var(--border);
+}
+
+.lock-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.lock-cal-weekdays span {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0.3rem 0;
+}
+
+.lock-cal-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.lock-cal-day {
+  text-align: center;
+  padding: 0.45rem 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  color: var(--text);
+  position: relative;
+}
+
+.lock-cal-day.empty {
+  cursor: default;
+}
+
+.lock-cal-day.past {
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lock-cal-day.today {
+  font-weight: 800;
+  color: var(--primary);
+  background: var(--accent);
+}
+
+.lock-cal-day:not(.empty):not(.past):hover {
+  background: var(--accent);
+}
+
+.lock-cal-day.selected {
+  background: var(--primary) !important;
+  color: var(--white) !important;
+  opacity: 1;
+}
+
+/* Time Grid */
+.lock-time-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  user-select: none;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.lock-time-slot {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+}
+
+.lock-time-slot:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(30, 92, 69, 0.04);
+}
+
+.lock-time-slot.selected {
+  background: var(--primary);
+  color: var(--white);
+  border-color: var(--primary);
+}
+
+.lock-selected-info {
+  margin-top: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Lock Options */
+.lock-options {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.btn-lock {
+  white-space: nowrap;
+  width: auto;
+  padding: 0.65rem 1.5rem;
+  flex-shrink: 0;
+}
+
+/* Active Locks List */
+.locks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lock-card {
+  background: var(--white);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--danger);
+  padding: 1rem 1.25rem;
+  box-shadow: var(--shadow-xs);
+  transition: all var(--transition);
+}
+
+.lock-card:hover {
+  box-shadow: var(--shadow);
+}
+
+.lock-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.lock-card-dates {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin-bottom: 0.35rem;
+}
+
+.lock-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  align-items: center;
+}
+
+.lock-court-tag {
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 0.15rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.lock-reason-tag {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.15rem 0.55rem;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.lock-card-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.lock-time-tag {
+  background: var(--bg);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
 /* ─── RESPONSIVE ───────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -1357,6 +1794,23 @@ tbody td {
 
   .revenue-grid.two-col {
     grid-template-columns: 1fr;
+  }
+
+  /* Court Lock */
+  .lock-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lock-options {
+    flex-direction: column;
+  }
+
+  .btn-lock {
+    width: 100%;
+  }
+
+  .lock-time-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .revenue-total-amount {

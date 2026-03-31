@@ -85,7 +85,7 @@ async function deleteBookingGroup(bookingRef) {
   return sbFetch(`bookings?booking_ref=eq.${encodeURIComponent(bookingRef)}`, { method: 'DELETE' });
 }
 
-// Old bookings are kept in the database for revenue tracking
+// Bookings are never deleted — kept permanently for revenue tracking and records
 
 async function updateAuthUser(data) {
   const token = getToken();
@@ -168,12 +168,62 @@ function groupBookingsByRef(bookings) {
   });
 }
 
+// ─── ANNOUNCEMENT HELPERS ────────────────────────────────────────────────────
+
+async function fetchAnnouncement() {
+  const rows = await sbFetch('announcements?select=*&order=id.asc&limit=1');
+  return rows.length ? rows[0] : null;
+}
+
+async function upsertAnnouncement(id, title, content, is_visible) {
+  if (id) {
+    return sbFetch(`announcements?id=eq.${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title, content, is_visible, updated_at: new Date().toISOString() }),
+    });
+  }
+  return sbFetch('announcements', {
+    method: 'POST',
+    body: JSON.stringify({ title, content, is_visible }),
+  });
+}
+
+// ─── COURT LOCK HELPERS ──────────────────────────────────────────────────────
+
+async function fetchCourtLocks() {
+  return sbFetch('court_locks?select=*&order=date.asc,time_slot.asc');
+}
+
+async function createCourtLocks(locks) {
+  return sbFetch('court_locks', {
+    method: 'POST',
+    body: JSON.stringify(locks),
+  });
+}
+
+async function deleteCourtLock(id) {
+  return sbFetch(`court_locks?id=eq.${id}`, { method: 'DELETE' });
+}
+
+async function deleteCourtLockGroup(groupId) {
+  return sbFetch(`court_locks?lock_group=eq.${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+}
+
 // ─── STATE ────────────────────────────────────────────────────────────────────
 
 let allBookings = [];
 let pendingDeleteRef = null;
 let currentRevenuePeriod = 'monthly';
 let lastUpdatedTime = null;
+let allCourtLocks = [];
+let lockCalendarDate = new Date();
+let selectedLockDates = new Set();
+let selectedLockTimes = new Set();
+let isDraggingDates = false;
+let isDraggingTimes = false;
+let dragDateAdding = true;
+let dragTimeAdding = true;
+let pendingDeleteLockGroup = null;
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
 
@@ -287,6 +337,7 @@ function updateRevenue() {
   document.getElementById('revenue-bookings').textContent = grouped.length;
   document.getElementById('revenue-hours').textContent = `${filtered.length}h`;
 
+  // Court breakdown
   [1, 2, 3].forEach(c => {
     const courtSlots = filtered.filter(b => b.court_id === c);
     const courtGrouped = groupBookingsByRef(courtSlots);
@@ -297,15 +348,14 @@ function updateRevenue() {
       `${courtGrouped.length} booking${courtGrouped.length !== 1 ? 's' : ''}`;
   });
 
-  const gcashSlots = filtered.filter(b => b.payment_method === 'GCash');
-  const cashSlots = filtered.filter(b => b.payment_method === 'Cash');
+  // Payment breakdown
+  const gcashHours = filtered.filter(b => b.payment_method === 'GCash').length;
+  const cashHours = filtered.filter(b => b.payment_method === 'Cash').length;
 
-  document.getElementById('rev-gcash-amount').textContent =
-    `₱${(gcashSlots.length * RATE_PER_HOUR).toLocaleString()}`;
-  document.getElementById('rev-gcash-count').textContent = `${gcashSlots.length} hours`;
-  document.getElementById('rev-cash-amount').textContent =
-    `₱${(cashSlots.length * RATE_PER_HOUR).toLocaleString()}`;
-  document.getElementById('rev-cash-count').textContent = `${cashSlots.length} hours`;
+  document.getElementById('rev-gcash-amount').textContent = `₱${(gcashHours * RATE_PER_HOUR).toLocaleString()}`;
+  document.getElementById('rev-gcash-count').textContent = `${gcashHours} hours`;
+  document.getElementById('rev-cash-amount').textContent = `₱${(cashHours * RATE_PER_HOUR).toLocaleString()}`;
+  document.getElementById('rev-cash-count').textContent = `${cashHours} hours`;
 }
 
 // ─── TABLE ────────────────────────────────────────────────────────────────────
@@ -379,8 +429,12 @@ function applyFilters() {
   const date = document.getElementById('filter-date').value;
   const court = document.getElementById('filter-court').value;
   const search = document.getElementById('filter-search').value.trim().toLowerCase();
+  const showPast = document.getElementById('filter-show-past').checked;
+  const today = todayStr();
 
   const filtered = allBookings.filter(b => {
+    // Hide past bookings unless a specific date is picked or "Show past" is checked
+    if (!date && !showPast && b.date < today) return false;
     if (date && b.date !== date) return false;
     if (court && String(b.court_id) !== court) return false;
     if (search) {
@@ -447,6 +501,7 @@ async function loadBookings() {
   try {
     allBookings = await fetchAllBookings();
     lastUpdatedTime = new Date();
+
     applyFilters();
     updateDashboard(allBookings);
     updateRevenue();
@@ -544,6 +599,410 @@ function switchTab(tab) {
   if (target) target.classList.add('active');
 
   if (tab === 'revenue') updateRevenue();
+  if (tab === 'announcements') loadAnnouncement();
+  if (tab === 'locks') {
+    renderLockCalendar();
+    renderLockTimeGrid();
+    loadCourtLocks();
+  }
+}
+
+// ─── ANNOUNCEMENT LOGIC ──────────────────────────────────────────────────────
+
+let currentAnnouncementId = null;
+
+async function loadAnnouncement() {
+  const statusEl = document.getElementById('announcement-status');
+  statusEl.textContent = 'Loading…';
+  try {
+    const ann = await fetchAnnouncement();
+    if (ann) {
+      currentAnnouncementId = ann.id;
+      document.getElementById('announcement-title').value = ann.title || '';
+      document.getElementById('announcement-content').value = ann.content || '';
+      document.getElementById('announcement-visible').checked = ann.is_visible ?? false;
+      statusEl.textContent = ann.updated_at
+        ? `Last saved ${new Date(ann.updated_at).toLocaleString()}`
+        : '';
+      updateAnnouncementPreview();
+    } else {
+      currentAnnouncementId = null;
+      statusEl.textContent = 'No announcement yet — create one below.';
+    }
+  } catch (e) {
+    statusEl.textContent = 'Failed to load.';
+    console.error(e);
+  }
+}
+
+function updateAnnouncementPreview() {
+  const title = document.getElementById('announcement-title').value.trim();
+  const content = document.getElementById('announcement-content').value.trim();
+  const preview = document.getElementById('announcement-preview');
+  if (!title && !content) {
+    preview.style.display = 'none';
+    return;
+  }
+  preview.style.display = 'block';
+  document.getElementById('announcement-preview-title').textContent = title;
+  document.getElementById('announcement-preview-content').textContent = content;
+}
+
+async function saveAnnouncement() {
+  const title = document.getElementById('announcement-title').value.trim();
+  const content = document.getElementById('announcement-content').value.trim();
+  const is_visible = document.getElementById('announcement-visible').checked;
+  const btn = document.getElementById('btn-save-announcement');
+  const statusEl = document.getElementById('announcement-status');
+
+  if (!title && !content) {
+    showToast('Please enter a title or content.', true);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const result = await upsertAnnouncement(currentAnnouncementId, title, content, is_visible);
+    if (!currentAnnouncementId && result?.length) {
+      currentAnnouncementId = result[0].id;
+    }
+    statusEl.textContent = `Saved ${new Date().toLocaleString()}`;
+    showToast('Announcement saved successfully.');
+  } catch (e) {
+    showToast(e.message || 'Failed to save announcement.', true);
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Announcement';
+  }
+}
+
+// ─── COURT LOCK LOGIC ────────────────────────────────────────────────────────
+
+const LOCK_TIME_SLOTS = [];
+(() => {
+  for (let h = 6; h <= 21; h++) {
+    const period = h >= 12 ? 'PM' : 'AM';
+    const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
+    const nextH = h + 1;
+    const nextPeriod = nextH >= 12 ? 'PM' : 'AM';
+    const displayNextH = nextH > 12 ? nextH - 12 : nextH === 0 ? 12 : nextH;
+    LOCK_TIME_SLOTS.push(`${displayH}:00 ${period} – ${displayNextH}:00 ${nextPeriod}`);
+  }
+})();
+
+function renderLockCalendar() {
+  const container = document.getElementById('lock-cal-days');
+  const monthLabel = document.getElementById('lock-cal-month');
+  if (!container || !monthLabel) return;
+
+  const year = lockCalendarDate.getFullYear();
+  const month = lockCalendarDate.getMonth();
+  monthLabel.textContent = new Date(year, month).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayString = todayStr();
+
+  let html = '';
+  for (let i = 0; i < firstDay; i++) {
+    html += '<span class="lock-cal-day empty"></span>';
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const isPast = dateStr < todayString;
+    const isSelected = selectedLockDates.has(dateStr);
+    const classes = ['lock-cal-day'];
+    if (isPast) classes.push('past');
+    if (isSelected) classes.push('selected');
+    if (dateStr === todayString) classes.push('today');
+    html += `<span class="${classes.join(' ')}" data-date="${dateStr}">${d}</span>`;
+  }
+  container.innerHTML = html;
+  updateLockDatesInfo();
+  attachCalendarDragEvents();
+}
+
+function attachCalendarDragEvents() {
+  const container = document.getElementById('lock-cal-days');
+  const days = container.querySelectorAll('.lock-cal-day:not(.empty):not(.past)');
+
+  days.forEach(day => {
+    day.addEventListener('mousedown', e => {
+      e.preventDefault();
+      isDraggingDates = true;
+      const date = day.dataset.date;
+      dragDateAdding = !selectedLockDates.has(date);
+      toggleLockDate(date, dragDateAdding);
+    });
+    day.addEventListener('mouseenter', () => {
+      if (isDraggingDates) {
+        toggleLockDate(day.dataset.date, dragDateAdding);
+      }
+    });
+    day.addEventListener('touchstart', e => {
+      e.preventDefault();
+      isDraggingDates = true;
+      const date = day.dataset.date;
+      dragDateAdding = !selectedLockDates.has(date);
+      toggleLockDate(date, dragDateAdding);
+    }, { passive: false });
+  });
+
+  const stopDrag = () => { isDraggingDates = false; };
+  document.addEventListener('mouseup', stopDrag);
+  document.addEventListener('touchend', stopDrag);
+
+  container.addEventListener('touchmove', e => {
+    if (!isDraggingDates) return;
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (el?.classList.contains('lock-cal-day') && !el.classList.contains('empty') && !el.classList.contains('past')) {
+      toggleLockDate(el.dataset.date, dragDateAdding);
+    }
+  }, { passive: false });
+}
+
+function toggleLockDate(dateStr, add) {
+  if (add) {
+    selectedLockDates.add(dateStr);
+  } else {
+    selectedLockDates.delete(dateStr);
+  }
+  const el = document.querySelector(`.lock-cal-day[data-date="${dateStr}"]`);
+  if (el) el.classList.toggle('selected', add);
+  updateLockDatesInfo();
+}
+
+function updateLockDatesInfo() {
+  const el = document.getElementById('lock-dates-info');
+  if (!el) return;
+  const count = selectedLockDates.size;
+  el.textContent = count === 0 ? 'No dates selected' : `${count} date${count !== 1 ? 's' : ''} selected`;
+}
+
+function renderLockTimeGrid() {
+  const container = document.getElementById('lock-time-grid');
+  if (!container) return;
+
+  container.innerHTML = LOCK_TIME_SLOTS.map(slot =>
+    `<div class="lock-time-slot" data-slot="${slot}">${slot}</div>`
+  ).join('');
+
+  updateLockTimesInfo();
+  attachTimeDragEvents();
+}
+
+function attachTimeDragEvents() {
+  const container = document.getElementById('lock-time-grid');
+  const slots = container.querySelectorAll('.lock-time-slot');
+
+  slots.forEach(slot => {
+    slot.addEventListener('mousedown', e => {
+      e.preventDefault();
+      isDraggingTimes = true;
+      const s = slot.dataset.slot;
+      dragTimeAdding = !selectedLockTimes.has(s);
+      toggleLockTime(s, dragTimeAdding);
+    });
+    slot.addEventListener('mouseenter', () => {
+      if (isDraggingTimes) {
+        toggleLockTime(slot.dataset.slot, dragTimeAdding);
+      }
+    });
+    slot.addEventListener('touchstart', e => {
+      e.preventDefault();
+      isDraggingTimes = true;
+      const s = slot.dataset.slot;
+      dragTimeAdding = !selectedLockTimes.has(s);
+      toggleLockTime(s, dragTimeAdding);
+    }, { passive: false });
+  });
+
+  const stopDrag = () => { isDraggingTimes = false; };
+  document.addEventListener('mouseup', stopDrag);
+  document.addEventListener('touchend', stopDrag);
+
+  container.addEventListener('touchmove', e => {
+    if (!isDraggingTimes) return;
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (el?.classList.contains('lock-time-slot')) {
+      toggleLockTime(el.dataset.slot, dragTimeAdding);
+    }
+  }, { passive: false });
+}
+
+function toggleLockTime(slot, add) {
+  if (add) {
+    selectedLockTimes.add(slot);
+  } else {
+    selectedLockTimes.delete(slot);
+  }
+  const el = document.querySelector(`.lock-time-slot[data-slot="${slot}"]`);
+  if (el) el.classList.toggle('selected', add);
+  updateLockTimesInfo();
+}
+
+function updateLockTimesInfo() {
+  const el = document.getElementById('lock-times-info');
+  if (!el) return;
+  const count = selectedLockTimes.size;
+  el.textContent = count === 0 ? 'No times selected' : `${count} slot${count !== 1 ? 's' : ''} selected`;
+}
+
+async function lockSelectedSlots() {
+  if (selectedLockDates.size === 0) {
+    showToast('Please select at least one date.', true);
+    return;
+  }
+  if (selectedLockTimes.size === 0) {
+    showToast('Please select at least one time slot.', true);
+    return;
+  }
+
+  const courtVal = document.getElementById('lock-court').value;
+  const reason = document.getElementById('lock-reason').value.trim();
+  const courts = courtVal === 'all' ? [1, 2, 3] : [parseInt(courtVal)];
+  const lockGroup = `lock_${Date.now()}`;
+
+  const locks = [];
+  for (const date of selectedLockDates) {
+    for (const slot of selectedLockTimes) {
+      for (const court_id of courts) {
+        locks.push({ date, time_slot: slot, court_id, reason, lock_group: lockGroup });
+      }
+    }
+  }
+
+  const btn = document.getElementById('btn-lock-slots');
+  btn.disabled = true;
+  btn.textContent = 'Locking…';
+
+  try {
+    await createCourtLocks(locks);
+    showToast(`Locked ${locks.length} slot${locks.length !== 1 ? 's' : ''} successfully.`);
+    selectedLockDates.clear();
+    selectedLockTimes.clear();
+    renderLockCalendar();
+    renderLockTimeGrid();
+    document.getElementById('lock-reason').value = '';
+    loadCourtLocks();
+  } catch (e) {
+    showToast(e.message || 'Failed to lock slots.', true);
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔒 Lock Selected Slots';
+  }
+}
+
+async function loadCourtLocks() {
+  const container = document.getElementById('locks-list');
+  if (!container) return;
+
+  container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading locks…</div>';
+
+  try {
+    allCourtLocks = await fetchCourtLocks();
+    renderCourtLocks();
+  } catch (e) {
+    container.innerHTML = '<div class="table-empty"><div class="icon">⚠️</div><p>Failed to load locks</p></div>';
+    console.error(e);
+  }
+}
+
+function renderCourtLocks() {
+  const container = document.getElementById('locks-list');
+  if (!container) return;
+
+  const today = todayStr();
+  const activeLocks = allCourtLocks.filter(l => l.date >= today);
+
+  if (activeLocks.length === 0) {
+    container.innerHTML = '<div class="table-empty"><div class="icon">🔓</div><p>No active locks</p><div class="sub">Lock some slots above to prevent bookings</div></div>';
+    return;
+  }
+
+  // Group by lock_group or by date+court+reason
+  const groups = {};
+  for (const lock of activeLocks) {
+    const key = lock.lock_group || `${lock.date}_${lock.court_id}_${lock.reason || ''}`;
+    if (!groups[key]) {
+      groups[key] = { key, reason: lock.reason, locks: [] };
+    }
+    groups[key].locks.push(lock);
+  }
+
+  const groupList = Object.values(groups).sort((a, b) => {
+    const ad = a.locks[0]?.date || '';
+    const bd = b.locks[0]?.date || '';
+    return ad.localeCompare(bd);
+  });
+
+  container.innerHTML = groupList.map(g => {
+    const dates = [...new Set(g.locks.map(l => l.date))].sort();
+    const courts = [...new Set(g.locks.map(l => l.court_id))].sort();
+    const times = [...new Set(g.locks.map(l => l.time_slot))];
+    const dateDisplay = dates.length === 1
+      ? formatDisplayDate(dates[0])
+      : `${formatDisplayDate(dates[0])} — ${formatDisplayDate(dates[dates.length - 1])} (${dates.length} days)`;
+    const courtDisplay = courts.length === 3
+      ? 'All Courts'
+      : courts.map(c => COURT_NAMES[c] || `Court ${c}`).join(', ');
+
+    return `
+      <div class="lock-card">
+        <div class="lock-card-header">
+          <div class="lock-card-info">
+            <div class="lock-card-dates">${dateDisplay}</div>
+            <div class="lock-card-meta">
+              <span class="lock-court-tag">${courtDisplay}</span>
+              <span>${times.length} time slot${times.length !== 1 ? 's' : ''}</span>
+              ${g.reason ? `<span class="lock-reason-tag">${g.reason}</span>` : ''}
+            </div>
+          </div>
+          <button class="btn-delete" data-lock-group="${g.key}">Unlock</button>
+        </div>
+        <div class="lock-card-times">${times.map(t => `<span class="lock-time-tag">${t}</span>`).join('')}</div>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.btn-delete[data-lock-group]').forEach(btn => {
+    btn.addEventListener('click', () => openDeleteLockModal(btn.dataset.lockGroup));
+  });
+}
+
+function openDeleteLockModal(groupKey) {
+  pendingDeleteLockGroup = groupKey;
+  document.getElementById('delete-lock-modal').classList.add('show');
+}
+
+function closeDeleteLockModal() {
+  pendingDeleteLockGroup = null;
+  document.getElementById('delete-lock-modal').classList.remove('show');
+}
+
+async function confirmDeleteLock() {
+  if (!pendingDeleteLockGroup) return;
+  const groupKey = pendingDeleteLockGroup;
+  closeDeleteLockModal();
+
+  try {
+    await deleteCourtLockGroup(groupKey);
+    allCourtLocks = allCourtLocks.filter(l => {
+      const key = l.lock_group || `${l.date}_${l.court_id}_${l.reason || ''}`;
+      return key !== groupKey;
+    });
+    renderCourtLocks();
+    showToast('Slots unlocked successfully.');
+  } catch (e) {
+    showToast(e.message || 'Failed to unlock slots.', true);
+    console.error(e);
+  }
 }
 
 // ─── RENDER APP ───────────────────────────────────────────────────────────────
@@ -606,6 +1065,14 @@ function renderApp() {
           <button class="tab-btn" data-tab="revenue">
             <span class="tab-icon">💰</span>
             Revenue
+          </button>
+          <button class="tab-btn" data-tab="announcements">
+            <span class="tab-icon">📢</span>
+            Announcements
+          </button>
+          <button class="tab-btn" data-tab="locks">
+            <span class="tab-icon">🔒</span>
+            Court Lock
           </button>
         </div>
 
@@ -675,6 +1142,10 @@ function renderApp() {
                 <option value="3">Court 3</option>
               </select>
             </div>
+            <label class="filter-checkbox">
+              <input type="checkbox" id="filter-show-past" />
+              <span>Show past bookings</span>
+            </label>
             <button class="btn-reset" id="btn-reset-filters">Reset</button>
           </div>
 
@@ -762,6 +1233,101 @@ function renderApp() {
           </div>
         </div><!-- /tab-revenue -->
 
+        <!-- ═══ ANNOUNCEMENTS TAB ═══ -->
+        <div class="tab-content" id="tab-announcements">
+          <div class="section-title">📢 Announcement Board</div>
+          <p class="section-desc">Edit the announcement below. When visible, it will be shown to all users on the booking page.</p>
+
+          <div class="announcement-editor">
+            <div class="announcement-toolbar">
+              <label class="announcement-toggle">
+                <input type="checkbox" id="announcement-visible" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Visible to users</span>
+              </label>
+              <span class="announcement-status" id="announcement-status"></span>
+            </div>
+
+            <div class="input-group">
+              <label for="announcement-title">Title</label>
+              <input type="text" id="announcement-title" placeholder="e.g. Court Maintenance Notice" />
+            </div>
+
+            <div class="input-group">
+              <label for="announcement-content">Content</label>
+              <textarea id="announcement-content" rows="6" placeholder="Write your announcement here…"></textarea>
+            </div>
+
+            <div class="announcement-preview" id="announcement-preview" style="display:none">
+              <div class="announcement-preview-label">Preview — how users will see it</div>
+              <div class="announcement-preview-title" id="announcement-preview-title"></div>
+              <div class="announcement-preview-content" id="announcement-preview-content"></div>
+            </div>
+
+            <div class="announcement-actions">
+              <button class="btn-primary" id="btn-save-announcement" style="width:auto">Save Announcement</button>
+            </div>
+          </div>
+        </div><!-- /tab-announcements -->
+
+        <!-- ═══ COURT LOCK TAB ═══ -->
+        <div class="tab-content" id="tab-locks">
+          <div class="section-title">🔒 Court Lock</div>
+          <p class="section-desc">Lock specific dates and times to prevent bookings. Drag to select multiple dates or time slots.</p>
+
+          <div class="lock-editor">
+            <div class="lock-grid">
+              <!-- Calendar -->
+              <div class="lock-panel">
+                <div class="lock-panel-title">Select Dates</div>
+                <div class="lock-calendar">
+                  <div class="lock-cal-header">
+                    <button class="lock-cal-nav" id="lock-cal-prev">&lsaquo;</button>
+                    <span class="lock-cal-month" id="lock-cal-month"></span>
+                    <button class="lock-cal-nav" id="lock-cal-next">&rsaquo;</button>
+                  </div>
+                  <div class="lock-cal-weekdays">
+                    <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                  </div>
+                  <div class="lock-cal-days" id="lock-cal-days"></div>
+                </div>
+                <div class="lock-selected-info" id="lock-dates-info">No dates selected</div>
+              </div>
+
+              <!-- Time Slots -->
+              <div class="lock-panel">
+                <div class="lock-panel-title">Select Time Slots</div>
+                <div class="lock-time-grid" id="lock-time-grid"></div>
+                <div class="lock-selected-info" id="lock-times-info">No times selected</div>
+              </div>
+            </div>
+
+            <!-- Court & Reason -->
+            <div class="lock-options">
+              <div class="filter-group">
+                <label for="lock-court">Court</label>
+                <select id="lock-court">
+                  <option value="all">All Courts</option>
+                  <option value="1">Court 1</option>
+                  <option value="2">Court 2</option>
+                  <option value="3">Court 3</option>
+                </select>
+              </div>
+              <div class="filter-group" style="flex:2">
+                <label for="lock-reason">Event / Reason</label>
+                <input type="text" id="lock-reason" placeholder="e.g. Tournament, Maintenance…" />
+              </div>
+              <button class="btn-primary btn-lock" id="btn-lock-slots">🔒 Lock Selected Slots</button>
+            </div>
+          </div>
+
+          <!-- Active Locks -->
+          <div class="section-title" style="margin-top:2rem">Active Locks</div>
+          <div class="locks-list" id="locks-list">
+            <div class="loading-spinner"><div class="spinner"></div>Loading locks…</div>
+          </div>
+        </div><!-- /tab-locks -->
+
       </main>
     </div>
 
@@ -797,6 +1363,19 @@ function renderApp() {
         <div class="modal-actions">
           <button class="btn-cancel-modal" id="modal-cancel">Keep Booking</button>
           <button class="btn-confirm-delete" id="modal-confirm">Yes, Cancel It</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Lock Confirm Modal -->
+    <div class="modal-overlay" id="delete-lock-modal">
+      <div class="modal-card">
+        <div class="modal-icon">🔓</div>
+        <h2>Remove Lock?</h2>
+        <p>This will unlock the slots and allow users to book them again.</p>
+        <div class="modal-actions">
+          <button class="btn-cancel-modal" id="lock-modal-cancel">Keep Lock</button>
+          <button class="btn-confirm-delete" id="lock-modal-confirm">Yes, Unlock</button>
         </div>
       </div>
     </div>
@@ -850,10 +1429,12 @@ function renderApp() {
   document.getElementById('filter-search').addEventListener('input', applyFilters);
   document.getElementById('filter-date').addEventListener('change', applyFilters);
   document.getElementById('filter-court').addEventListener('change', applyFilters);
+  document.getElementById('filter-show-past').addEventListener('change', applyFilters);
   document.getElementById('btn-reset-filters').addEventListener('click', () => {
     document.getElementById('filter-search').value = '';
     document.getElementById('filter-date').value = '';
     document.getElementById('filter-court').value = '';
+    document.getElementById('filter-show-past').checked = false;
     applyFilters();
   });
 
@@ -880,6 +1461,29 @@ function renderApp() {
   document.getElementById('modal-confirm').addEventListener('click', confirmDelete);
   document.getElementById('delete-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeDeleteModal();
+  });
+
+  // Announcement
+  document.getElementById('btn-save-announcement').addEventListener('click', saveAnnouncement);
+  document.getElementById('announcement-title').addEventListener('input', updateAnnouncementPreview);
+  document.getElementById('announcement-content').addEventListener('input', updateAnnouncementPreview);
+
+  // Court Lock
+  document.getElementById('lock-cal-prev').addEventListener('click', () => {
+    lockCalendarDate.setMonth(lockCalendarDate.getMonth() - 1);
+    renderLockCalendar();
+  });
+  document.getElementById('lock-cal-next').addEventListener('click', () => {
+    lockCalendarDate.setMonth(lockCalendarDate.getMonth() + 1);
+    renderLockCalendar();
+  });
+  document.getElementById('btn-lock-slots').addEventListener('click', lockSelectedSlots);
+
+  // Delete lock modal
+  document.getElementById('lock-modal-cancel').addEventListener('click', closeDeleteLockModal);
+  document.getElementById('lock-modal-confirm').addEventListener('click', confirmDeleteLock);
+  document.getElementById('delete-lock-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeDeleteLockModal();
   });
 
   // Auto-restore session
