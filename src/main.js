@@ -148,6 +148,7 @@ function groupBookingsByRef(bookings) {
         court_id: b.court_id,
         date: b.date,
         payment_method: b.payment_method,
+        receipt_url: b.receipt_url || null,
         created_at: b.created_at,
         slots: [],
       };
@@ -392,7 +393,7 @@ function renderTable(grouped) {
   if (grouped.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8">
+        <td colspan="9">
           <div class="table-empty">
             <div class="icon">📭</div>
             <p>No bookings found</p>
@@ -412,6 +413,9 @@ function renderTable(grouped) {
       <td data-label="Time">${b.time_range}</td>
       <td data-label="Hours">${b.total_hours}h</td>
       <td data-label="Payment">${paymentBadge(b.payment_method)}</td>
+      <td data-label="Receipt">
+        ${b.receipt_url ? `<a class="btn-receipt" href="${b.receipt_url}" target="_blank" rel="noopener noreferrer">View Receipt</a>` : '<span class="no-receipt">—</span>'}
+      </td>
       <td>
         <button class="btn-delete" data-ref="${b.booking_ref}">Cancel</button>
       </td>
@@ -1164,6 +1168,7 @@ function renderApp() {
                     <th>Time Range</th>
                     <th>Hours</th>
                     <th>Payment</th>
+                    <th>Receipt</th>
                     <th>Action</th>
                   </tr>
                 </thead>
