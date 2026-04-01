@@ -414,7 +414,7 @@ function renderTable(grouped) {
       <td data-label="Hours">${b.total_hours}h</td>
       <td data-label="Payment">${paymentBadge(b.payment_method)}</td>
       <td data-label="Receipt">
-        ${b.receipt_url ? `<a class="btn-receipt" href="${b.receipt_url}" target="_blank" rel="noopener noreferrer">View Receipt</a>` : '<span class="no-receipt">—</span>'}
+        ${b.receipt_url ? `<button class="btn-receipt" data-receipt="${b.receipt_url}">View Receipt</button>` : '<span class="no-receipt">—</span>'}
       </td>
       <td>
         <button class="btn-delete" data-ref="${b.booking_ref}">Cancel</button>
@@ -424,6 +424,10 @@ function renderTable(grouped) {
 
   tbody.querySelectorAll('.btn-delete').forEach(btn => {
     btn.addEventListener('click', () => openDeleteModal(btn.dataset.ref));
+  });
+
+  tbody.querySelectorAll('.btn-receipt').forEach(btn => {
+    btn.addEventListener('click', () => openReceiptModal(btn.dataset.receipt));
   });
 }
 
@@ -453,6 +457,38 @@ function applyFilters() {
 }
 
 // ─── DELETE MODAL ─────────────────────────────────────────────────────────────
+
+function openReceiptModal(url) {
+  const modal = document.getElementById('receipt-modal');
+  const img = document.getElementById('receipt-img');
+  const loading = document.getElementById('receipt-loading');
+  const error = document.getElementById('receipt-error');
+  const link = document.getElementById('receipt-open-link');
+
+  img.style.display = 'none';
+  error.style.display = 'none';
+  loading.style.display = 'flex';
+  link.href = url;
+
+  modal.classList.add('show');
+
+  img.onload = () => {
+    loading.style.display = 'none';
+    img.style.display = 'block';
+  };
+  img.onerror = () => {
+    loading.style.display = 'none';
+    error.style.display = 'block';
+  };
+  img.src = url;
+}
+
+function closeReceiptModal() {
+  document.getElementById('receipt-modal').classList.remove('show');
+  const img = document.getElementById('receipt-img');
+  img.src = '';
+  img.style.display = 'none';
+}
 
 function openDeleteModal(ref) {
   pendingDeleteRef = ref;
@@ -1371,6 +1407,29 @@ function renderApp() {
       </div>
     </div>
 
+    <!-- Receipt Modal -->
+    <div class="modal-overlay" id="receipt-modal">
+      <div class="modal-card receipt-modal-card">
+        <div class="account-modal-header">
+          <h2>Payment Receipt</h2>
+          <button class="modal-close" id="receipt-modal-close">&times;</button>
+        </div>
+        <div class="receipt-modal-body">
+          <div class="receipt-loading" id="receipt-loading">
+            <div class="spinner"></div>
+            Loading image…
+          </div>
+          <div class="receipt-error" id="receipt-error" style="display:none">
+            ⚠️ Image could not be loaded. The link may have expired (ImgBB links last 7 days).
+          </div>
+          <img id="receipt-img" src="" alt="Payment Receipt" style="display:none" />
+        </div>
+        <div class="receipt-modal-footer">
+          <a id="receipt-open-link" href="" target="_blank" rel="noopener noreferrer" class="btn-cancel-modal">Open in New Tab</a>
+        </div>
+      </div>
+    </div>
+
     <!-- Delete Lock Confirm Modal -->
     <div class="modal-overlay" id="delete-lock-modal">
       <div class="modal-card">
@@ -1482,6 +1541,12 @@ function renderApp() {
     renderLockCalendar();
   });
   document.getElementById('btn-lock-slots').addEventListener('click', lockSelectedSlots);
+
+  // Receipt modal
+  document.getElementById('receipt-modal-close').addEventListener('click', closeReceiptModal);
+  document.getElementById('receipt-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeReceiptModal();
+  });
 
   // Delete lock modal
   document.getElementById('lock-modal-cancel').addEventListener('click', closeDeleteLockModal);
