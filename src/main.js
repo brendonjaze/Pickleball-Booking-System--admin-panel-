@@ -372,16 +372,7 @@ function paymentBadge(method) {
 }
 
 function renderDateCell(dateStr) {
-  const relative = getRelativeDay(dateStr);
-  const display = formatDisplayDate(dateStr);
-  const isPast = dateStr < todayStr();
-  if (relative) {
-    return `<div class="date-cell">
-      <span class="date-relative${isPast ? ' past' : ''}">${relative}</span>
-      <span>${display}</span>
-    </div>`;
-  }
-  return display;
+  return formatDisplayDate(dateStr);
 }
 
 function renderTable(grouped) {
@@ -393,7 +384,7 @@ function renderTable(grouped) {
   if (grouped.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9">
+        <td colspan="8">
           <div class="table-empty">
             <div class="icon">📭</div>
             <p>No bookings found</p>
@@ -413,9 +404,6 @@ function renderTable(grouped) {
       <td data-label="Time">${b.time_range}</td>
       <td data-label="Hours">${b.total_hours}h</td>
       <td data-label="Payment">${paymentBadge(b.payment_method)}</td>
-      <td data-label="Receipt">
-        ${b.receipt_url ? `<button class="btn-receipt" data-receipt="${b.receipt_url}">View Receipt</button>` : '<span class="no-receipt">—</span>'}
-      </td>
       <td>
         <button class="btn-delete" data-ref="${b.booking_ref}">Cancel</button>
       </td>
@@ -426,9 +414,6 @@ function renderTable(grouped) {
     btn.addEventListener('click', () => openDeleteModal(btn.dataset.ref));
   });
 
-  tbody.querySelectorAll('.btn-receipt').forEach(btn => {
-    btn.addEventListener('click', () => openReceiptModal(btn.dataset.receipt));
-  });
 }
 
 // ─── FILTERS ─────────────────────────────────────────────────────────────────
@@ -1066,13 +1051,25 @@ function renderApp() {
           </div>
           <div class="input-group">
             <label for="login-password">Password</label>
-            <input
-              type="password"
-              id="login-password"
-              placeholder="Enter password"
-              autocomplete="current-password"
-              required
-            />
+            <div class="password-wrapper">
+              <input
+                type="password"
+                id="login-password"
+                placeholder="Enter password"
+                autocomplete="current-password"
+                required
+              />
+              <button type="button" class="btn-show-password" id="btn-show-password" aria-label="Show password">
+                <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+                <svg id="eye-off-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                  <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+              </button>
+            </div>
           </div>
           <div id="login-error" class="login-error">Incorrect email or password.</div>
           <button type="submit" class="btn-primary" id="login-btn">Sign In</button>
@@ -1204,7 +1201,6 @@ function renderApp() {
                     <th>Time Range</th>
                     <th>Hours</th>
                     <th>Payment</th>
-                    <th>Receipt</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -1336,7 +1332,10 @@ function renderApp() {
 
               <!-- Time Slots -->
               <div class="lock-panel">
-                <div class="lock-panel-title">Select Time Slots</div>
+                <div class="lock-panel-title-row">
+                  <span class="lock-panel-title" style="margin-bottom:0">Select Time Slots</span>
+                  <button class="btn-lock-all-time" id="btn-lock-all-time">Lock All</button>
+                </div>
                 <div class="lock-time-grid" id="lock-time-grid"></div>
                 <div class="lock-selected-info" id="lock-times-info">No times selected</div>
               </div>
@@ -1407,29 +1406,6 @@ function renderApp() {
       </div>
     </div>
 
-    <!-- Receipt Modal -->
-    <div class="modal-overlay" id="receipt-modal">
-      <div class="modal-card receipt-modal-card">
-        <div class="account-modal-header">
-          <h2>Payment Receipt</h2>
-          <button class="modal-close" id="receipt-modal-close">&times;</button>
-        </div>
-        <div class="receipt-modal-body">
-          <div class="receipt-loading" id="receipt-loading">
-            <div class="spinner"></div>
-            Loading image…
-          </div>
-          <div class="receipt-error" id="receipt-error" style="display:none">
-            ⚠️ Image could not be loaded. The link may have expired (ImgBB links last 7 days).
-          </div>
-          <img id="receipt-img" src="" alt="Payment Receipt" style="display:none" />
-        </div>
-        <div class="receipt-modal-footer">
-          <a id="receipt-open-link" href="" target="_blank" rel="noopener noreferrer" class="btn-cancel-modal">Open in New Tab</a>
-        </div>
-      </div>
-    </div>
-
     <!-- Delete Lock Confirm Modal -->
     <div class="modal-overlay" id="delete-lock-modal">
       <div class="modal-card">
@@ -1475,6 +1451,15 @@ function renderApp() {
       btn.disabled = false;
       btn.textContent = 'Sign In';
     }
+  });
+
+  // Show/hide password
+  document.getElementById('btn-show-password').addEventListener('click', () => {
+    const input = document.getElementById('login-password');
+    const isPassword = input.type === 'password';
+    input.type = isPassword ? 'text' : 'password';
+    document.getElementById('eye-icon').style.display = isPassword ? 'none' : '';
+    document.getElementById('eye-off-icon').style.display = isPassword ? '' : 'none';
   });
 
   // Logout
@@ -1541,11 +1526,9 @@ function renderApp() {
     renderLockCalendar();
   });
   document.getElementById('btn-lock-slots').addEventListener('click', lockSelectedSlots);
-
-  // Receipt modal
-  document.getElementById('receipt-modal-close').addEventListener('click', closeReceiptModal);
-  document.getElementById('receipt-modal').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeReceiptModal();
+  document.getElementById('btn-lock-all-time').addEventListener('click', () => {
+    const allSelected = LOCK_TIME_SLOTS.every(s => selectedLockTimes.has(s));
+    LOCK_TIME_SLOTS.forEach(s => toggleLockTime(s, !allSelected));
   });
 
   // Delete lock modal

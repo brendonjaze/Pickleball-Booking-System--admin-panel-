@@ -184,6 +184,34 @@ html, body {
   color: #b0b8c4;
 }
 
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-wrapper input {
+  width: 100%;
+  padding-right: 2.75rem;
+}
+
+.btn-show-password {
+  position: absolute;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  transition: color var(--transition);
+}
+
+.btn-show-password:hover {
+  color: var(--primary);
+}
+
 .btn-primary {
   background: var(--primary);
   color: var(--white);
@@ -1427,6 +1455,33 @@ tbody td {
   margin-bottom: 1rem;
 }
 
+.lock-panel-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.btn-lock-all-time {
+  background: var(--white);
+  color: var(--primary);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 0.3rem 0.75rem;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.btn-lock-all-time:hover {
+  background: var(--primary);
+  color: var(--white);
+  border-color: var(--primary);
+}
+
 /* Calendar */
 .lock-calendar {
   user-select: none;
@@ -1668,6 +1723,27 @@ tbody td {
 
 /* ─── RESPONSIVE ───────────────────────────────────────── */
 
+/* ── 1024px: Small laptop / large tablet landscape ─────── */
+@media (max-width: 1024px) {
+  .admin-main {
+    max-width: 100%;
+    padding: 1.5rem 1.5rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .revenue-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .lock-grid {
+    gap: 1rem;
+  }
+}
+
+/* ── 768px: Tablet portrait ────────────────────────────── */
 @media (max-width: 768px) {
   .admin-main {
     padding: 1.25rem 1rem;
@@ -1677,15 +1753,31 @@ tbody td {
     display: none;
   }
 
+  /* Tab nav scrollable */
+  .tab-nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .tab-nav::-webkit-scrollbar { display: none; }
+
+  .tab-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Stats */
   .stats-grid {
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
   }
 
   .stat-card {
-    padding: 1rem 1rem;
+    padding: 1rem;
   }
 
+  /* Revenue */
   .revenue-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -1694,7 +1786,7 @@ tbody td {
     grid-template-columns: 1fr 1fr;
   }
 
-  /* Lock grid side by side still ok at 768 but options stack */
+  /* Lock */
   .lock-options {
     flex-wrap: wrap;
   }
@@ -1708,55 +1800,61 @@ tbody td {
     width: 100%;
   }
 
-  /* Announcement toolbar stacks */
+  /* Announcement */
   .announcement-toolbar {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
   }
 
-  /* Tab nav: allow horizontal scroll on smaller tablets */
-  .tab-nav {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+  /* Receipt modal */
+  .receipt-modal-card {
+    max-width: calc(100vw - 2rem);
   }
 
-  .tab-nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .tab-btn {
-    white-space: nowrap;
-    flex-shrink: 0;
+  #receipt-img {
+    max-height: 380px;
   }
 }
 
+/* ── 640px: Large phone / small tablet ─────────────────── */
 @media (max-width: 640px) {
+  /* Header */
   .admin-header {
     padding: 0 1rem;
     height: 56px;
+    gap: 0.5rem;
   }
 
   .header-brand {
-    font-size: 0.82rem;
+    font-size: 0.8rem;
+  }
+
+  .header-right {
+    gap: 0.4rem;
   }
 
   .btn-header {
-    padding: 0.3rem 0.65rem;
-    font-size: 0.7rem;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.68rem;
   }
 
+  /* Main */
   .admin-main {
     padding: 1rem 0.75rem;
   }
 
   .section-title {
-    font-size: 0.92rem;
+    font-size: 0.9rem;
   }
 
   .section-desc {
     font-size: 0.78rem;
+  }
+
+  /* Greeting / toolbar */
+  .greeting {
+    font-size: 0.9rem;
   }
 
   .dashboard-toolbar {
@@ -1787,28 +1885,19 @@ tbody td {
   }
 
   .stat-icon {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     margin-bottom: 0.35rem;
   }
 
-  /* Tabs — horizontal scroll with smaller sizing */
+  /* Tabs */
   .tab-nav {
     margin-bottom: 1.25rem;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .tab-nav::-webkit-scrollbar {
-    display: none;
   }
 
   .tab-btn {
     padding: 0.55rem 0.75rem;
     font-size: 0.72rem;
     gap: 0.3rem;
-    white-space: nowrap;
-    flex-shrink: 0;
   }
 
   .tab-icon {
@@ -1838,18 +1927,12 @@ tbody td {
     text-align: center;
   }
 
-  /* Card-style rows instead of table on mobile */
-  .table-scroll {
-    overflow-x: unset;
-  }
+  /* Table → card layout */
+  .table-scroll { overflow-x: unset; }
 
-  table, thead, tbody, tr, th, td {
-    display: block;
-  }
+  table, thead, tbody, tr, th, td { display: block; }
 
-  thead {
-    display: none;
-  }
+  thead { display: none; }
 
   tbody tr {
     border: 1px solid var(--border-light);
@@ -1857,18 +1940,15 @@ tbody td {
     margin-bottom: 0.625rem;
     padding: 0.875rem 1rem;
     background: var(--white);
-    position: relative;
     border-left: 3px solid var(--primary-light);
   }
 
-  tbody tr:nth-child(even) {
+  tbody tr:nth-child(even),
+  tbody tr:hover {
     background: var(--white);
   }
 
-  tbody tr:hover {
-    background: var(--white);
-    box-shadow: var(--shadow);
-  }
+  tbody tr:hover { box-shadow: var(--shadow); }
 
   tbody td {
     padding: 0.2rem 0;
@@ -1898,14 +1978,7 @@ tbody td {
     border-radius: 0;
   }
 
-  .table-scroll {
-    overflow-x: visible;
-  }
-
-  table {
-    min-width: unset;
-    width: 100%;
-  }
+  table { min-width: unset; width: 100%; }
 
   tbody td:last-child {
     margin-top: 0.5rem;
@@ -1913,42 +1986,24 @@ tbody td {
     border-top: 1px solid var(--border-light);
   }
 
-  tbody td:last-child::before {
-    display: none;
-  }
+  tbody td:last-child::before { display: none; }
 
-  .btn-delete {
+  .btn-delete,
+  .btn-receipt {
     width: 100%;
     text-align: center;
     padding: 0.5rem;
   }
 
   /* Revenue */
-  .revenue-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .revenue-grid.two-col {
-    grid-template-columns: 1fr;
-  }
-
-  .revenue-total-amount {
-    font-size: 2rem;
-  }
-
-  .revenue-summary-card {
-    padding: 1.25rem 1.25rem;
-  }
-
-  .revenue-meta {
-    flex-direction: column;
-    gap: 0.25rem;
-  }
+  .revenue-grid { grid-template-columns: 1fr; }
+  .revenue-grid.two-col { grid-template-columns: 1fr; }
+  .revenue-total-amount { font-size: 2rem; }
+  .revenue-summary-card { padding: 1.25rem; }
+  .revenue-meta { flex-direction: column; gap: 0.25rem; }
 
   /* Announcement */
-  .announcement-editor {
-    padding: 1rem;
-  }
+  .announcement-editor { padding: 1rem; }
 
   .announcement-toolbar {
     flex-direction: column;
@@ -1956,82 +2011,38 @@ tbody td {
     gap: 0.5rem;
   }
 
-  .toggle-label {
-    font-size: 0.75rem;
-  }
+  .toggle-label { font-size: 0.75rem; }
 
-  .announcement-preview {
-    padding: 0.875rem 1rem;
-  }
-
-  .announcement-preview-title {
-    font-size: 0.85rem;
-  }
-
-  .announcement-preview-content {
-    font-size: 0.78rem;
-  }
+  .announcement-preview { padding: 0.875rem 1rem; }
+  .announcement-preview-title { font-size: 1rem; }
+  .announcement-preview-content { font-size: 0.85rem; }
 
   /* Court Lock */
-  .lock-editor {
-    padding: 1rem;
-  }
+  .lock-editor { padding: 1rem; }
 
   .lock-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
 
-  .lock-panel {
-    padding: 1rem;
-  }
+  .lock-panel { padding: 1rem; }
 
-  .lock-cal-day {
-    padding: 0.4rem 0;
-    font-size: 0.72rem;
-  }
-
-  .lock-cal-weekdays span {
-    font-size: 0.58rem;
-  }
-
-  .lock-cal-month {
-    font-size: 0.82rem;
-  }
-
-  .lock-cal-nav {
-    width: 28px;
-    height: 28px;
-    font-size: 1rem;
-  }
-
-  .lock-time-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .lock-time-slot {
-    padding: 0.55rem 0.5rem;
-    font-size: 0.7rem;
-  }
+  .lock-cal-day { padding: 0.4rem 0; font-size: 0.72rem; }
+  .lock-cal-weekdays span { font-size: 0.58rem; }
+  .lock-cal-month { font-size: 0.82rem; }
+  .lock-cal-nav { width: 28px; height: 28px; font-size: 1rem; }
+  .lock-time-grid { grid-template-columns: 1fr 1fr; }
+  .lock-time-slot { padding: 0.55rem 0.5rem; font-size: 0.7rem; }
 
   .lock-options {
     flex-direction: column;
     gap: 0.75rem;
   }
 
-  .lock-options .filter-group {
-    width: 100%;
-    min-width: unset;
-  }
+  .lock-options .filter-group { width: 100%; min-width: unset; }
+  .btn-lock { width: 100%; }
 
-  .btn-lock {
-    width: 100%;
-  }
-
-  /* Lock cards */
-  .lock-card {
-    padding: 0.875rem 1rem;
-  }
+  .lock-card { padding: 0.875rem 1rem; }
 
   .lock-card-header {
     flex-direction: column;
@@ -2043,32 +2054,17 @@ tbody td {
     text-align: center;
   }
 
-  .lock-card-dates {
-    font-size: 0.82rem;
-  }
-
-  .lock-card-times {
-    gap: 0.25rem;
-  }
-
-  .lock-time-tag {
-    font-size: 0.62rem;
-    padding: 0.15rem 0.45rem;
-  }
+  .lock-card-dates { font-size: 0.82rem; }
+  .lock-card-times { gap: 0.25rem; }
+  .lock-time-tag { font-size: 0.62rem; padding: 0.15rem 0.45rem; }
 
   /* Login */
   .login-card {
-    padding: 2.25rem 1.5rem 2rem;
+    padding: 2rem 1.5rem 1.75rem;
     border-radius: 20px;
   }
 
-  .login-card h1 {
-    font-size: 1.2rem;
-  }
-
-  .login-brand-icon {
-    font-size: 2rem;
-  }
+  .login-card h1 { font-size: 1.2rem; }
 
   /* Modals */
   .modal-card {
@@ -2077,79 +2073,231 @@ tbody td {
     max-width: calc(100vw - 2rem);
   }
 
-  .modal-card h2 {
-    font-size: 1.05rem;
-  }
-
-  .modal-card p {
-    font-size: 0.78rem;
-  }
+  .modal-card h2 { font-size: 1.05rem; }
+  .modal-card p { font-size: 0.78rem; }
 
   .modal-actions {
     flex-direction: column;
     gap: 0.5rem;
   }
 
-  .modal-actions button {
-    width: 100%;
+  .modal-actions button { width: 100%; }
+
+  /* Receipt modal */
+  .receipt-modal-card { max-width: calc(100vw - 1.5rem); }
+  .receipt-modal-body { padding: 1rem; min-height: 160px; }
+  #receipt-img { max-height: 320px; }
+  .receipt-modal-footer { padding: 0.875rem 1rem; }
+}
+
+/* ── 480px: Medium phone ────────────────────────────────── */
+@media (max-width: 480px) {
+  .admin-header {
+    padding: 0 0.875rem;
+    height: 52px;
+  }
+
+  .header-brand { font-size: 0.75rem; }
+
+  .btn-header {
+    padding: 0.275rem 0.5rem;
+    font-size: 0.65rem;
+  }
+
+  .admin-main { padding: 0.875rem 0.625rem; }
+
+  /* Stats: single column on medium phones */
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .stat-card { padding: 0.875rem 0.875rem; }
+  .stat-value { font-size: 1.3rem; }
+
+  /* Tabs */
+  .tab-btn {
+    padding: 0.5rem 0.65rem;
+    font-size: 0.7rem;
+  }
+
+  .tab-icon { font-size: 0.82rem; }
+
+  /* Lock time grid stays 2-col but slimmer */
+  .lock-time-slot { font-size: 0.68rem; padding: 0.5rem 0.35rem; }
+
+  /* Receipt */
+  #receipt-img { max-height: 280px; }
+
+  /* Login */
+  .login-card {
+    padding: 1.75rem 1.25rem 1.5rem;
   }
 }
 
-@media (max-width: 380px) {
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
+/* ── 375px: iPhone SE / small phones ───────────────────── */
+@media (max-width: 375px) {
+  .admin-header {
+    padding: 0 0.75rem;
+    height: 50px;
   }
 
-  .stat-value {
-    font-size: 1.2rem;
+  .header-brand { font-size: 0.7rem; }
+
+  .header-right { gap: 0.3rem; }
+
+  .btn-header {
+    padding: 0.25rem 0.45rem;
+    font-size: 0.62rem;
   }
 
-  .header-brand {
-    font-size: 0.75rem;
-  }
+  .admin-main { padding: 0.75rem 0.5rem; }
 
-  /* Tabs even smaller */
+  .section-title { font-size: 0.85rem; }
+
+  .greeting { font-size: 0.82rem; }
+
+  /* Stats: 2-col but very compact */
+  .stats-grid { gap: 0.4rem; }
+  .stat-card { padding: 0.75rem 0.75rem; }
+  .stat-value { font-size: 1.2rem; }
+  .stat-label, .stat-sub { font-size: 0.58rem; }
+  .stat-icon { font-size: 0.85rem; }
+
+  /* Tabs */
   .tab-btn {
-    padding: 0.5rem 0.6rem;
-    font-size: 0.68rem;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.65rem;
+    gap: 0.25rem;
   }
 
-  .tab-icon {
-    font-size: 0.78rem;
+  .tab-icon { font-size: 0.75rem; }
+
+  .tab-badge {
+    font-size: 0.5rem;
+    padding: 0.08rem 0.3rem;
   }
 
-  /* Calendar tighter */
-  .lock-cal-day {
-    padding: 0.3rem 0;
-    font-size: 0.68rem;
-  }
+  /* Calendar */
+  .lock-cal-day { padding: 0.35rem 0; font-size: 0.68rem; }
+  .lock-cal-days { gap: 2px; }
+  .lock-cal-weekdays span { font-size: 0.55rem; }
+  .lock-cal-month { font-size: 0.78rem; }
+  .lock-cal-nav { width: 26px; height: 26px; font-size: 0.9rem; }
 
-  .lock-cal-days {
-    gap: 2px;
-  }
+  /* Time grid: 1 col on very small */
+  .lock-time-grid { grid-template-columns: 1fr; }
+  .lock-time-slot { font-size: 0.7rem; padding: 0.55rem; }
 
-  .lock-cal-weekdays span {
-    font-size: 0.55rem;
-  }
+  /* Lock cards */
+  .lock-time-tag { font-size: 0.58rem; padding: 0.12rem 0.35rem; }
+  .lock-card-meta { gap: 0.3rem; }
 
   /* Announcement */
-  .announcement-editor {
-    padding: 0.875rem;
-  }
-
+  .announcement-editor { padding: 0.875rem; }
   .announcement-editor .input-group input,
-  .announcement-editor textarea {
-    font-size: 0.82rem;
-    padding: 0.65rem 0.75rem;
+  .announcement-editor textarea { font-size: 0.82rem; padding: 0.65rem 0.75rem; }
+  .announcement-preview-title { font-size: 0.9rem; }
+  .announcement-preview-content { font-size: 0.78rem; }
+
+  /* Revenue */
+  .revenue-total-amount { font-size: 1.75rem; }
+  .revenue-summary-card { padding: 1rem; }
+
+  /* Modals */
+  .modal-card {
+    padding: 1.5rem 1rem;
+    max-width: calc(100vw - 1rem);
   }
 
-  /* Lock time tags wrap tighter */
-  .lock-time-tag {
-    font-size: 0.58rem;
-    padding: 0.12rem 0.35rem;
+  .modal-card h2 { font-size: 1rem; }
+  .modal-card p { font-size: 0.75rem; }
+
+  /* Receipt */
+  .receipt-modal-body { padding: 0.875rem; }
+  #receipt-img { max-height: 240px; }
+  .receipt-modal-footer { padding: 0.75rem 0.875rem; }
+
+  /* Login */
+  .login-card {
+    padding: 1.5rem 1rem 1.25rem;
+    border-radius: 16px;
   }
 
-  .lock-card-meta {
-    gap: 0.35rem;
+  .login-card h1 { font-size: 1.1rem; }
+  .login-card p { font-size: 0.75rem; }
+
+  /* Filters */
+  .filters-bar { padding: 0.75rem; gap: 0.5rem; }
+}
+
+/* ── 320px: Very small phones (Galaxy Fold, etc.) ───────── */
+@media (max-width: 320px) {
+  .admin-header {
+    padding: 0 0.625rem;
+    height: 48px;
   }
+
+  .header-brand { font-size: 0.65rem; }
+
+  .btn-header {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.6rem;
+  }
+
+  .admin-main { padding: 0.625rem 0.5rem; }
+
+  .section-title { font-size: 0.8rem; }
+  .section-desc { font-size: 0.72rem; }
+
+  .greeting { font-size: 0.75rem; }
+
+  /* Stats: 1 column only */
+  .stats-grid { grid-template-columns: 1fr; }
+  .stat-card { padding: 0.75rem; }
+  .stat-value { font-size: 1.5rem; }
+  .stat-label, .stat-sub { font-size: 0.6rem; }
+
+  /* Tabs */
+  .tab-btn {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.6rem;
+  }
+
+  .tab-icon { font-size: 0.7rem; }
+
+  /* Calendar */
+  .lock-cal-day { padding: 0.28rem 0; font-size: 0.62rem; }
+  .lock-cal-weekdays span { font-size: 0.5rem; }
+  .lock-cal-nav { width: 24px; height: 24px; }
+
+  /* Lock */
+  .lock-panel { padding: 0.75rem; }
+  .lock-editor { padding: 0.75rem; }
+  .lock-time-slot { font-size: 0.65rem; padding: 0.5rem; }
+
+  /* Revenue */
+  .revenue-total-amount { font-size: 1.6rem; }
+  .revenue-grid { grid-template-columns: 1fr; }
+  .revenue-grid.two-col { grid-template-columns: 1fr; }
+
+  /* Modals */
+  .modal-card {
+    padding: 1.25rem 0.875rem;
+    max-width: calc(100vw - 0.75rem);
+    border-radius: 12px;
+  }
+
+  /* Receipt */
+  #receipt-img { max-height: 200px; }
+
+  /* Login */
+  .login-card {
+    padding: 1.25rem 0.875rem 1rem;
+    border-radius: 14px;
+  }
+
+  .login-card h1 { font-size: 1rem; }
+
+  .filters-bar { padding: 0.625rem; }
 }
