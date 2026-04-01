@@ -78,7 +78,7 @@ async function sbFetch(path, options = {}) {
 }
 
 async function fetchAllBookings() {
-  return sbFetch('bookings?select=*&order=date.asc,time_slot.asc');
+  return sbFetch('bookings?select=*&order=created_at.desc,time_slot.asc');
 }
 
 async function deleteBookingGroup(bookingRef) {
