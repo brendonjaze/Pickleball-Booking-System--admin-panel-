@@ -938,6 +938,22 @@ async function lockSelectedSlots() {
   const courts = courtVal === 'all' ? [1, 2, 3] : [parseInt(courtVal)];
   const lockGroup = `lock_${Date.now()}`;
 
+  // Check for duplicates against existing locks
+  const duplicates = [];
+  for (const date of selectedLockDates) {
+    for (const slot of selectedLockTimes) {
+      for (const court_id of courts) {
+        const exists = allCourtLocks.some(l => l.date === date && l.time_slot === slot && l.court_id === court_id);
+        if (exists) duplicates.push(`${date} ${slot} (Court ${court_id})`);
+      }
+    }
+  }
+
+  if (duplicates.length > 0) {
+    showToast(`Some slots are already locked: ${duplicates.slice(0, 3).join(', ')}${duplicates.length > 3 ? ` +${duplicates.length - 3} more` : ''}.`, true, 5000);
+    return;
+  }
+
   const locks = [];
   for (const date of selectedLockDates) {
     for (const slot of selectedLockTimes) {
