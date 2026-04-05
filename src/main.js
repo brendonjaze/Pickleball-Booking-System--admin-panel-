@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Hy_hFyt_cdZkGV74qjbHlQ_L_gA18rb';
 const RATE_PER_HOUR = 100;
 const SESSION_KEY = 'glan_admin_token';
 
-const COURT_NAMES = { 1: 'Court 1', 2: 'Court 2', 3: 'Court 3' };
+const COURT_NAMES = { 1: 'Court 1', 2: 'Court 2', 3: 'Court 3', 4: 'Court 4' };
 
 // ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
 
@@ -935,7 +935,7 @@ async function lockSelectedSlots() {
 
   const courtVal = document.getElementById('lock-court').value;
   const reason = document.getElementById('lock-reason').value.trim();
-  const courts = courtVal === 'all' ? [1, 2, 3] : [parseInt(courtVal)];
+  const courts = courtVal === 'all' ? [1, 2, 3, 4] : [parseInt(courtVal)];
   const lockGroup = `lock_${Date.now()}`;
 
   // Check for duplicates against existing locks
@@ -1415,6 +1415,7 @@ function renderApp() {
                   <option value="1">Court 1</option>
                   <option value="2">Court 2</option>
                   <option value="3">Court 3</option>
+                  <option value="4">Court 4</option>
                 </select>
               </div>
               <div class="filter-group" style="flex:2">
