@@ -441,6 +441,49 @@ function applyFilters() {
   renderTable(groupBookingsByRef(filtered));
 }
 
+// ─── EXCEL EXPORT ────────────────────────────────────────────────────────────
+
+function downloadPastBookingsCSV() {
+  const today = todayStr();
+  const past = allBookings.filter(b => b.date < today);
+
+  if (past.length === 0) {
+    showToast('No past bookings to export.', true);
+    return;
+  }
+
+  const grouped = groupBookingsByRef(past);
+
+  const headers = ['Booking Ref', 'Name', 'Phone', 'Court', 'Date', 'Time Range', 'Hours', 'Payment Method'];
+
+  const rows = grouped.map(b => [
+    b.booking_ref,
+    b.name || '',
+    b.phone,
+    COURT_NAMES[b.court_id] || `Court ${b.court_id}`,
+    formatDisplayDate(b.date),
+    b.time_range,
+    b.total_hours,
+    b.payment_method,
+  ]);
+
+  const escape = v => {
+    const s = String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const csv = [headers, ...rows].map(r => r.map(escape).join(',')).join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `past-bookings-${today}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`Exported ${grouped.length} past booking${grouped.length !== 1 ? 's' : ''}.`);
+}
+
 // ─── DELETE MODAL ─────────────────────────────────────────────────────────────
 
 function openReceiptModal(url) {
@@ -1139,13 +1182,13 @@ function renderApp() {
               <div class="stat-sub">₱${RATE_PER_HOUR}/hour per court</div>
             </div>
             <div class="stat-card court1">
-              <div class="stat-icon">🟦</div>
+              <div class="stat-icon">💙</div>
               <div class="stat-label">Court 1</div>
               <div class="stat-value" id="stat-court1">—</div>
               <div class="stat-sub">Bookings today</div>
             </div>
             <div class="stat-card court2">
-              <div class="stat-icon">🟪</div>
+              <div class="stat-icon">💜</div>
               <div class="stat-label">Court 2</div>
               <div class="stat-value" id="stat-court2">—</div>
               <div class="stat-sub">Bookings today</div>
@@ -1188,7 +1231,10 @@ function renderApp() {
           <div class="table-wrapper">
             <div class="table-header">
               <span class="section-title" style="margin:0;font-size:0.88rem">Bookings</span>
-              <span class="table-count" id="bookings-count">Loading…</span>
+              <div style="display:flex;align-items:center;gap:0.75rem">
+                <span class="table-count" id="bookings-count">Loading…</span>
+                <button class="btn-export" id="btn-export-csv">⬇ Download Past Bookings</button>
+              </div>
             </div>
             <div class="table-scroll">
               <table>
@@ -1485,6 +1531,9 @@ function renderApp() {
     document.getElementById('filter-show-past').checked = false;
     applyFilters();
   });
+
+  // Export past bookings
+  document.getElementById('btn-export-csv').addEventListener('click', downloadPastBookingsCSV);
 
   // Refresh
   document.getElementById('btn-refresh').addEventListener('click', loadBookings);

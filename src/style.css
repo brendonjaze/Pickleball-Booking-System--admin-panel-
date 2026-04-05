@@ -666,6 +666,24 @@ html, body {
   border-color: var(--border);
 }
 
+.btn-export {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: 0.45rem 0.9rem;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+
+.btn-export:hover {
+  background: var(--primary-dark, #3a5bbf);
+}
+
 /* ─── TABLE ────────────────────────────────────────────── */
 
 .table-wrapper {
