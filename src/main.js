@@ -1097,6 +1097,8 @@ function renderApp() {
   document.querySelector('#app').innerHTML = `
     <!-- Login -->
     <div id="login-screen" style="display:flex">
+      <div class="login-wrapper">
+        <img src="/BMJ COURT PICKLEBALL - PRIMARY LOGO.png" alt="BMJ Court Pickleball" class="login-logo" />
       <div class="login-card">
         <h1>Glan Pickleball<br>Community</h1>
         <p>Admin Panel — Sign in to continue</p>
@@ -1137,6 +1139,7 @@ function renderApp() {
           <button type="submit" class="btn-primary" id="login-btn">Sign In</button>
         </form>
       </div>
+      </div>
     </div>
 
     <!-- Admin App -->
@@ -1144,6 +1147,9 @@ function renderApp() {
       <header class="admin-header">
         <div class="header-brand">
           Glan Pickleball Community
+        </div>
+        <div class="header-center">
+          <img src="/BMJ COURT PICKLEBALL - PRIMARY LOGO.png" alt="BMJ Court Pickleball" class="header-logo" />
         </div>
         <div class="header-right">
           <span class="header-badge">Admin</span>

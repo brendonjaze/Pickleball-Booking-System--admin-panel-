@@ -5,26 +5,26 @@
 }
 
 :root {
-  --bg: #f3f6ea;
-  --bg-subtle: #eaeed9;
-  --primary: #1e5c45;
-  --primary-dark: #163f30;
-  --primary-light: #2a7d5f;
-  --primary-ghost: rgba(30, 92, 69, 0.06);
-  --accent: #e4edca;
+  --bg: #f0fbfd;
+  --bg-subtle: #e0f9fc;
+  --primary: #0e7490;
+  --primary-dark: #083344;
+  --primary-light: #0891b2;
+  --primary-ghost: rgba(14, 116, 144, 0.06);
+  --accent: #cffafe;
   --danger: #c0392b;
   --danger-light: #fdecea;
   --text: #1a1a1a;
   --text-secondary: #4b5563;
   --text-muted: #6b7280;
-  --border: #d1dba8;
-  --border-light: #e2eacc;
+  --border: #a5f3fc;
+  --border-light: #cffafe;
   --white: #ffffff;
-  --shadow-xs: 0 1px 3px rgba(30, 92, 69, 0.06);
-  --shadow: 0 2px 8px rgba(30, 92, 69, 0.1);
-  --shadow-md: 0 4px 16px rgba(30, 92, 69, 0.12);
-  --shadow-lg: 0 8px 32px rgba(30, 92, 69, 0.14);
-  --shadow-xl: 0 12px 48px rgba(30, 92, 69, 0.18);
+  --shadow-xs: 0 1px 3px rgba(14, 116, 144, 0.06);
+  --shadow: 0 2px 8px rgba(14, 116, 144, 0.1);
+  --shadow-md: 0 4px 16px rgba(14, 116, 144, 0.12);
+  --shadow-lg: 0 8px 32px rgba(14, 116, 144, 0.14);
+  --shadow-xl: 0 12px 48px rgba(14, 116, 144, 0.18);
   --radius: 14px;
   --radius-sm: 10px;
   --radius-xs: 6px;
@@ -47,7 +47,7 @@ html, body {
 }
 
 ::selection {
-  background: rgba(30, 92, 69, 0.15);
+  background: rgba(14, 116, 144, 0.15);
   color: var(--primary-dark);
 }
 
@@ -106,9 +106,27 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: linear-gradient(135deg, #133d2e, #1e5c45, #2a7d5f, #1e5c45, #163f30);
+  background: linear-gradient(135deg, #083344, #0e7490, #0891b2, #0e7490, #083344);
   background-size: 300% 300%;
   animation: gradientShift 12s ease infinite;
+}
+
+.login-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-logo {
+  height: 110px;
+  width: auto;
+  object-fit: contain;
+  margin-bottom: -16px;
+  position: relative;
+  z-index: 0;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.25));
 }
 
 .login-card {
@@ -177,7 +195,7 @@ html, body {
   outline: none;
   border-color: var(--primary);
   background: var(--white);
-  box-shadow: 0 0 0 3px rgba(30, 92, 69, 0.1);
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.1);
 }
 
 .input-group input::placeholder {
@@ -228,7 +246,7 @@ html, body {
 
 .btn-primary:hover {
   background: var(--primary-dark);
-  box-shadow: 0 4px 12px rgba(30, 92, 69, 0.25);
+  box-shadow: 0 4px 12px rgba(14, 116, 144, 0.25);
 }
 
 .btn-primary:active { transform: scale(0.98); }
@@ -284,6 +302,21 @@ html, body {
   font-weight: 800;
   font-size: 1rem;
   letter-spacing: -0.01em;
+}
+
+.header-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+}
+
+.header-logo {
+  height: 48px;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 .header-brand .brand-icon {
@@ -528,8 +561,8 @@ html, body {
   opacity: 0.07;
 }
 
-.stat-card.revenue { border-left-color: #f59e0b; }
-.stat-card.revenue::after { background: #f59e0b; }
+.stat-card.revenue { border-left-color: #e4189a; }
+.stat-card.revenue::after { background: #e4189a; }
 .stat-card.court1  { border-left-color: #3b82f6; }
 .stat-card.court1::after  { background: #3b82f6; }
 .stat-card.court2  { border-left-color: #8b5cf6; }
@@ -559,7 +592,7 @@ html, body {
   letter-spacing: -0.02em;
 }
 
-.stat-card.revenue .stat-value { color: #b45309; }
+.stat-card.revenue .stat-value { color: #e4189a; }
 .stat-card.court1 .stat-value  { color: #1d4ed8; }
 .stat-card.court2 .stat-value  { color: #6d28d9; }
 .stat-card.court3 .stat-value  { color: #be185d; }
@@ -621,7 +654,7 @@ html, body {
   outline: none;
   border-color: var(--primary);
   background: var(--white);
-  box-shadow: 0 0 0 3px rgba(30, 92, 69, 0.08);
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.08);
 }
 
 .filter-group input[type="text"]::placeholder {
@@ -750,7 +783,7 @@ tbody tr:nth-child(even) {
 tbody tr:last-child { border-bottom: none; }
 
 tbody tr:hover {
-  background: rgba(30, 92, 69, 0.04);
+  background: rgba(14, 116, 144, 0.04);
 }
 
 tbody td {
@@ -1093,7 +1126,7 @@ tbody td {
 .rev-period-btn.active {
   background: var(--primary);
   color: var(--white);
-  box-shadow: 0 2px 6px rgba(30, 92, 69, 0.2);
+  box-shadow: 0 2px 6px rgba(14, 116, 144, 0.2);
 }
 
 .revenue-summary-card {
@@ -1102,7 +1135,7 @@ tbody td {
   padding: 1.75rem 2rem;
   box-shadow: var(--shadow-xs);
   border: 1px solid var(--border-light);
-  border-left: 4px solid #f59e0b;
+  border-left: 4px solid #e4189a;
   margin-bottom: 1.5rem;
   position: relative;
   overflow: hidden;
@@ -1116,7 +1149,7 @@ tbody td {
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: #e4189a;
   opacity: 0.04;
 }
 
@@ -1132,7 +1165,7 @@ tbody td {
 .revenue-total-amount {
   font-size: 2.5rem;
   font-weight: 800;
-  color: #b45309;
+  color: #e4189a;
   line-height: 1;
   margin-bottom: 0.75rem;
   letter-spacing: -0.02em;
@@ -1399,7 +1432,7 @@ tbody td {
   outline: none;
   border-color: var(--primary);
   background: var(--white);
-  box-shadow: 0 0 0 3px rgba(30, 92, 69, 0.08);
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.08);
 }
 
 .announcement-preview {
@@ -1624,7 +1657,7 @@ tbody td {
 .lock-time-slot:hover {
   border-color: var(--primary);
   color: var(--primary);
-  background: rgba(30, 92, 69, 0.04);
+  background: rgba(14, 116, 144, 0.04);
 }
 
 .lock-time-slot.selected {
@@ -1655,7 +1688,7 @@ tbody td {
   width: auto;
   padding: 0.65rem 1.5rem;
   flex-shrink: 0;
-  color: #f0fdf4;
+  color: #f0fbfd;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
@@ -2153,6 +2186,14 @@ tbody td {
   .login-card {
     padding: 1.75rem 1.25rem 1.5rem;
   }
+
+  .login-wrapper {
+    max-width: 360px;
+  }
+
+  .login-logo {
+    height: 90px;
+  }
 }
 
 /* ── 375px: iPhone SE / small phones ───────────────────── */
@@ -2239,9 +2280,20 @@ tbody td {
   .receipt-modal-footer { padding: 0.75rem 0.875rem; }
 
   /* Login */
+  #login-screen { padding: 1rem; }
+
+  .login-wrapper {
+    max-width: 100%;
+  }
+
   .login-card {
     padding: 1.5rem 1rem 1.25rem;
     border-radius: 16px;
+  }
+
+  .login-logo {
+    height: 80px;
+    margin-bottom: -14px;
   }
 
   .login-card h1 { font-size: 1.1rem; }
@@ -2312,9 +2364,16 @@ tbody td {
   #receipt-img { max-height: 200px; }
 
   /* Login */
+  #login-screen { padding: 0.75rem; }
+
   .login-card {
     padding: 1.25rem 0.875rem 1rem;
     border-radius: 14px;
+  }
+
+  .login-logo {
+    height: 70px;
+    margin-bottom: -12px;
   }
 
   .login-card h1 { font-size: 1rem; }
