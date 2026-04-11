@@ -1250,6 +1250,10 @@ function renderApp() {
             <span class="tab-icon">🔒</span>
             Court Lock
           </button>
+          <button class="tab-btn" data-tab="courts">
+            <span class="tab-icon">🏓</span>
+            Courts
+          </button>
         </div>
 
         <!-- ═══ BOOKINGS TAB ═══ -->
@@ -1464,6 +1468,37 @@ function renderApp() {
             <div class="loading-spinner"><div class="spinner"></div>Loading locks…</div>
           </div>
         </div><!-- /tab-locks -->
+
+        <!-- ═══ COURTS TAB ═══ -->
+        <div class="tab-content" id="tab-courts">
+          <div class="section-title">🏓 Manage Courts</div>
+          <p class="section-desc">Add or deactivate courts. Changes reflect immediately on the booking page.</p>
+
+          <div class="courts-list" id="courts-list">
+            <div class="loading-spinner"><div class="spinner"></div>Loading courts…</div>
+          </div>
+
+          <div class="section-title" style="margin-top:2rem">Add New Court</div>
+          <div class="court-add-form">
+            <div class="filter-group">
+              <label for="court-name">Court Name</label>
+              <input type="text" id="court-name" placeholder="e.g. Court 5" />
+            </div>
+            <div class="filter-group">
+              <label for="court-type">Type</label>
+              <select id="court-type">
+                <option value="Indoor">Indoor</option>
+                <option value="Outdoor">Outdoor</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label for="court-price">Price per Hour (₱)</label>
+              <input type="number" id="court-price" placeholder="100" min="1" value="100" />
+            </div>
+            <button class="btn-primary btn-add-court" id="btn-add-court">+ Add Court</button>
+          </div>
+          <div class="form-error" id="court-form-error"></div>
+        </div><!-- /tab-courts -->
 
       </main>
     </div>
