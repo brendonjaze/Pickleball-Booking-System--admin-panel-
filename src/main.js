@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Hy_hFyt_cdZkGV74qjbHlQ_L_gA18rb';
 const RATE_PER_HOUR = 100;
 const SESSION_KEY = 'glan_admin_token';
 
-const COURT_NAMES = { 1: 'Court 1', 2: 'Court 2', 3: 'Court 3', 4: 'Court 4' };
+let allCourts = []; // populated on load from Supabase
 
 // ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
 
@@ -382,7 +382,8 @@ function updateRevenue() {
 // ─── TABLE ────────────────────────────────────────────────────────────────────
 
 function courtBadge(id) {
-  return `<span class="court-badge c${id}">${COURT_NAMES[id] || 'Court ' + id}</span>`;
+  const court = allCourts.find(c => c.id === id);
+  return `<span class="court-badge c${id}">${court ? court.name : 'Court ' + id}</span>`;
 }
 
 function paymentBadge(method) {
@@ -616,9 +617,11 @@ async function loadBookings() {
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
-function showAdmin() {
+async function showAdmin() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('admin-app').classList.add('visible');
+  allCourts = await fetchCourts();
+  populateCourtDropdowns();
   loadBookings();
 }
 
