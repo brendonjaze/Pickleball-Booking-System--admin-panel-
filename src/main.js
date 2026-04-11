@@ -400,6 +400,22 @@ function courtBadge(id) {
   return `<span class="court-badge c${id}">${court ? court.name : 'Court ' + id}</span>`;
 }
 
+function populateCourtDropdowns() {
+  const options = allCourts.map(c =>
+    `<option value="${c.id}">${c.name}</option>`
+  ).join('');
+
+  const filterCourtEl = document.getElementById('filter-court');
+  if (filterCourtEl) {
+    filterCourtEl.innerHTML = `<option value="">All Courts</option>${options}`;
+  }
+
+  const lockCourtEl = document.getElementById('lock-court');
+  if (lockCourtEl) {
+    lockCourtEl.innerHTML = `<option value="all">All Courts</option>${options}`;
+  }
+}
+
 function paymentBadge(method) {
   const cls = method === 'GCash' ? 'gcash' : 'cash';
   const icon = method === 'GCash' ? '📱' : '💵';
@@ -972,7 +988,7 @@ async function lockSelectedSlots() {
 
   const courtVal = document.getElementById('lock-court').value;
   const reason = document.getElementById('lock-reason').value.trim();
-  const courts = courtVal === 'all' ? [1, 2, 3, 4] : [parseInt(courtVal)];
+  const courts = courtVal === 'all' ? allCourts.map(c => c.id) : [parseInt(courtVal)];
   const lockGroup = `lock_${Date.now()}`;
 
   // Check for duplicates against existing locks
@@ -1261,9 +1277,6 @@ function renderApp() {
               <label for="filter-court">Court</label>
               <select id="filter-court">
                 <option value="">All Courts</option>
-                <option value="1">Court 1</option>
-                <option value="2">Court 2</option>
-                <option value="3">Court 3</option>
               </select>
             </div>
             <label class="filter-checkbox">
@@ -1438,10 +1451,6 @@ function renderApp() {
                 <label for="lock-court">Court</label>
                 <select id="lock-court">
                   <option value="all">All Courts</option>
-                  <option value="1">Court 1</option>
-                  <option value="2">Court 2</option>
-                  <option value="3">Court 3</option>
-                  <option value="4">Court 4</option>
                 </select>
               </div>
               <div class="filter-group" style="flex:2">
