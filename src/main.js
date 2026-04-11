@@ -4,7 +4,6 @@ import './style.css';
 
 const SUPABASE_URL = 'https://qzjaegutlsgtlaworbuy.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Hy_hFyt_cdZkGV74qjbHlQ_L_gA18rb';
-const RATE_PER_HOUR = 100;
 const SESSION_KEY = 'glan_admin_token';
 
 let allCourts = []; // populated on load from Supabase
@@ -364,7 +363,10 @@ function updateRevenue() {
     periodLabel = String(year);
   }
 
-  const totalRevenue = filtered.length * RATE_PER_HOUR;
+  const totalRevenue = filtered.reduce((sum, b) => {
+    const court = allCourts.find(c => c.id === b.court_id);
+    return sum + (court ? court.price_per_hour : 100);
+  }, 0);
   const grouped = groupBookingsByRef(filtered);
 
   document.getElementById('revenue-period-label').textContent = periodLabel;
@@ -373,24 +375,41 @@ function updateRevenue() {
   document.getElementById('revenue-hours').textContent = `${filtered.length}h`;
 
   // Court breakdown
-  [1, 2, 3].forEach(c => {
-    const courtSlots = filtered.filter(b => b.court_id === c);
-    const courtGrouped = groupBookingsByRef(courtSlots);
-    document.getElementById(`rev-court${c}-amount`).textContent =
-      `₱${(courtSlots.length * RATE_PER_HOUR).toLocaleString()}`;
-    document.getElementById(`rev-court${c}-hours`).textContent = `${courtSlots.length}h`;
-    document.getElementById(`rev-court${c}-bookings`).textContent =
-      `${courtGrouped.length} booking${courtGrouped.length !== 1 ? 's' : ''}`;
-  });
+  const COURT_COLORS = ['#4a90d9', '#7b4ea6', '#c0392b', '#27ae60', '#e67e22'];
+  const courtCardsEl = document.getElementById('revenue-court-cards');
+  if (courtCardsEl) {
+    courtCardsEl.innerHTML = allCourts.map((court, i) => {
+      const courtSlots = filtered.filter(b => b.court_id === court.id);
+      const courtGrouped = groupBookingsByRef(courtSlots);
+      const amount = courtSlots.length * court.price_per_hour;
+      const color = COURT_COLORS[i % COURT_COLORS.length];
+      return `
+        <div class="revenue-card" style="border-left: 4px solid ${color}">
+          <div class="rev-card-label">${court.name}</div>
+          <div class="rev-card-amount">₱${amount.toLocaleString()}</div>
+          <div class="rev-card-meta">
+            <span>${courtSlots.length}h</span> · <span>${courtGrouped.length} booking${courtGrouped.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
 
   // Payment breakdown
-  const gcashHours = filtered.filter(b => b.payment_method === 'GCash').length;
-  const cashHours = filtered.filter(b => b.payment_method === 'Cash').length;
+  const gcashBookings = filtered.filter(b => b.payment_method === 'GCash');
+  const cashBookings = filtered.filter(b => b.payment_method === 'Cash');
+  const gcashRevenue = gcashBookings.reduce((sum, b) => {
+    const court = allCourts.find(c => c.id === b.court_id);
+    return sum + (court ? court.price_per_hour : 100);
+  }, 0);
+  const cashRevenue = cashBookings.reduce((sum, b) => {
+    const court = allCourts.find(c => c.id === b.court_id);
+    return sum + (court ? court.price_per_hour : 100);
+  }, 0);
 
-  document.getElementById('rev-gcash-amount').textContent = `₱${(gcashHours * RATE_PER_HOUR).toLocaleString()}`;
-  document.getElementById('rev-gcash-count').textContent = `${gcashHours} hours`;
-  document.getElementById('rev-cash-amount').textContent = `₱${(cashHours * RATE_PER_HOUR).toLocaleString()}`;
-  document.getElementById('rev-cash-count').textContent = `${cashHours} hours`;
+  document.getElementById('rev-gcash-amount').textContent = `₱${gcashRevenue.toLocaleString()}`;
+  document.getElementById('rev-gcash-count').textContent = `${gcashBookings.length} hours`;
+  document.getElementById('rev-cash-amount').textContent = `₱${cashRevenue.toLocaleString()}`;
+  document.getElementById('rev-cash-count').textContent = `${cashBookings.length} hours`;
 }
 
 // ─── TABLE ────────────────────────────────────────────────────────────────────
@@ -1334,29 +1353,7 @@ function renderApp() {
           </div>
 
           <div class="section-title" style="margin-top:1.5rem">By Court</div>
-          <div class="revenue-grid">
-            <div class="revenue-card court1">
-              <div class="rev-card-label">Court 1</div>
-              <div class="rev-card-amount" id="rev-court1-amount">₱0</div>
-              <div class="rev-card-meta">
-                <span id="rev-court1-hours">0h</span> · <span id="rev-court1-bookings">0 bookings</span>
-              </div>
-            </div>
-            <div class="revenue-card court2">
-              <div class="rev-card-label">Court 2</div>
-              <div class="rev-card-amount" id="rev-court2-amount">₱0</div>
-              <div class="rev-card-meta">
-                <span id="rev-court2-hours">0h</span> · <span id="rev-court2-bookings">0 bookings</span>
-              </div>
-            </div>
-            <div class="revenue-card court3">
-              <div class="rev-card-label">Court 3</div>
-              <div class="rev-card-amount" id="rev-court3-amount">₱0</div>
-              <div class="rev-card-meta">
-                <span id="rev-court3-hours">0h</span> · <span id="rev-court3-bookings">0 bookings</span>
-              </div>
-            </div>
-          </div>
+          <div class="revenue-grid" id="revenue-court-cards"></div>
 
           <div class="section-title" style="margin-top:1.5rem">By Payment Method</div>
           <div class="revenue-grid two-col">
