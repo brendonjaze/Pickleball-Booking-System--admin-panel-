@@ -1948,8 +1948,8 @@ tbody td {
   }
 
   .tab-btn {
-    padding: 0.55rem 0.75rem;
-    font-size: 0.72rem;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.78rem;
     gap: 0.3rem;
   }
 
@@ -2170,8 +2170,8 @@ tbody td {
 
   /* Tabs */
   .tab-btn {
-    padding: 0.5rem 0.65rem;
-    font-size: 0.7rem;
+    padding: 0.65rem 0.8rem;
+    font-size: 0.76rem;
   }
 
   .tab-icon { font-size: 0.82rem; }
@@ -2227,8 +2227,8 @@ tbody td {
 
   /* Tabs */
   .tab-btn {
-    padding: 0.45rem 0.55rem;
-    font-size: 0.65rem;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.72rem;
     gap: 0.25rem;
   }
 
@@ -2332,8 +2332,8 @@ tbody td {
 
   /* Tabs */
   .tab-btn {
-    padding: 0.4rem 0.5rem;
-    font-size: 0.6rem;
+    padding: 0.55rem 0.65rem;
+    font-size: 0.68rem;
   }
 
   .tab-icon { font-size: 0.7rem; }
