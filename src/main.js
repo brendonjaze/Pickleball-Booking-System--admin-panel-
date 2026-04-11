@@ -316,13 +316,27 @@ function updateDashboard(bookings) {
   if (greetingEl) greetingEl.textContent = `${getGreeting()}! Here's today's overview`;
 
   document.getElementById('stat-total').textContent = todayGrouped.length;
-  document.getElementById('stat-revenue').textContent =
-    `₱${(todayBookings.length * RATE_PER_HOUR).toLocaleString()}`;
 
-  [1, 2, 3].forEach(c => {
-    const count = todayGrouped.filter(b => b.court_id === c).length;
-    document.getElementById(`stat-court${c}`).textContent = count;
-  });
+  const todayRevenue = todayBookings.reduce((sum, b) => {
+    const court = allCourts.find(c => c.id === b.court_id);
+    return sum + (court ? court.price_per_hour : 100);
+  }, 0);
+  document.getElementById('stat-revenue').textContent = `₱${todayRevenue.toLocaleString()}`;
+
+  const COURT_COLORS = ['#4a90d9', '#7b4ea6', '#c0392b', '#27ae60', '#e67e22'];
+  const courtStatContainer = document.getElementById('court-stat-cards');
+  if (courtStatContainer) {
+    courtStatContainer.innerHTML = allCourts.map((court, i) => {
+      const count = todayGrouped.filter(b => b.court_id === court.id).length;
+      const color = COURT_COLORS[i % COURT_COLORS.length];
+      return `
+        <div class="stat-card" style="border-top: 4px solid ${color}">
+          <div class="stat-label">${court.name}</div>
+          <div class="stat-value" id="stat-court${court.id}">${count}</div>
+          <div class="stat-sub">Bookings today</div>
+        </div>`;
+    }).join('');
+  }
 
   // Update tab badge
   const tabBadge = document.getElementById('tab-bookings-badge');
@@ -1227,26 +1241,9 @@ function renderApp() {
               <div class="stat-icon">💰</div>
               <div class="stat-label">Revenue Today</div>
               <div class="stat-value" id="stat-revenue">—</div>
-              <div class="stat-sub">₱${RATE_PER_HOUR}/hour per court</div>
+              <div class="stat-sub">Per court/hour</div>
             </div>
-            <div class="stat-card court1">
-              <div class="stat-icon">💙</div>
-              <div class="stat-label">Court 1</div>
-              <div class="stat-value" id="stat-court1">—</div>
-              <div class="stat-sub">Bookings today</div>
-            </div>
-            <div class="stat-card court2">
-              <div class="stat-icon">💜</div>
-              <div class="stat-label">Court 2</div>
-              <div class="stat-value" id="stat-court2">—</div>
-              <div class="stat-sub">Bookings today</div>
-            </div>
-            <div class="stat-card court3">
-              <div class="stat-icon">🩷</div>
-              <div class="stat-label">Court 3</div>
-              <div class="stat-value" id="stat-court3">—</div>
-              <div class="stat-sub">Bookings today</div>
-            </div>
+            <div id="court-stat-cards"></div>
           </div>
 
           <div class="section-title">📋 All Bookings</div>
