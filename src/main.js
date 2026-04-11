@@ -322,7 +322,6 @@ function updateDashboard(bookings) {
   }, 0);
   document.getElementById('stat-revenue').textContent = `₱${todayRevenue.toLocaleString()}`;
 
-  const COURT_COLORS = ['#4a90d9', '#7b4ea6', '#c0392b', '#27ae60', '#e67e22'];
   const courtStatContainer = document.getElementById('court-stat-cards');
   if (courtStatContainer) {
     courtStatContainer.innerHTML = allCourts.map((court, i) => {
@@ -375,7 +374,6 @@ function updateRevenue() {
   document.getElementById('revenue-hours').textContent = `${filtered.length}h`;
 
   // Court breakdown
-  const COURT_COLORS = ['#4a90d9', '#7b4ea6', '#c0392b', '#27ae60', '#e67e22'];
   const courtCardsEl = document.getElementById('revenue-court-cards');
   if (courtCardsEl) {
     courtCardsEl.innerHTML = allCourts.map((court, i) => {
@@ -740,6 +738,7 @@ function switchTab(tab) {
 
   if (tab === 'revenue') updateRevenue();
   if (tab === 'announcements') loadAnnouncement();
+  if (tab === 'courts') renderCourtsTab();
   if (tab === 'locks') {
     renderLockCalendar();
     renderLockTimeGrid();
@@ -1160,6 +1159,89 @@ async function confirmDeleteLock() {
   } catch (e) {
     showToast(e.message || 'Failed to unlock slots.', true);
     console.error(e);
+  }
+}
+
+// ─── COURTS MANAGEMENT ────────────────────────────────────────────────────────
+
+const COURT_COLORS = ['#4a90d9', '#7b4ea6', '#c0392b', '#27ae60', '#e67e22'];
+
+function renderCourtsTab() {
+  const list = document.getElementById('courts-list');
+  if (!list) return;
+
+  if (allCourts.length === 0) {
+    list.innerHTML = '<p class="empty-state">No courts yet. Add one below.</p>';
+    return;
+  }
+
+  list.innerHTML = allCourts.map((court, i) => {
+    const color = COURT_COLORS[i % COURT_COLORS.length];
+    return `
+      <div class="court-item ${court.is_active ? '' : 'court-inactive'}">
+        <div class="court-item-color" style="background:${color}"></div>
+        <div class="court-item-info">
+          <div class="court-item-name">${court.name}</div>
+          <div class="court-item-meta">${court.type} · ₱${court.price_per_hour}/hr</div>
+        </div>
+        <div class="court-item-actions">
+          <button class="btn-court-toggle ${court.is_active ? 'btn-deactivate' : 'btn-activate'}"
+            data-id="${court.id}" data-active="${court.is_active}">
+            ${court.is_active ? 'Deactivate' : 'Activate'}
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.btn-court-toggle').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = parseInt(btn.dataset.id);
+      const currentlyActive = btn.dataset.active === 'true';
+      btn.disabled = true;
+      try {
+        await updateCourt(id, { is_active: !currentlyActive });
+        allCourts = await fetchCourts();
+        populateCourtDropdowns();
+        renderCourtsTab();
+        showToast(`Court ${currentlyActive ? 'deactivated' : 'activated'}.`);
+      } catch (e) {
+        showToast('Failed to update court.');
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+async function handleAddCourt() {
+  const name = document.getElementById('court-name').value.trim();
+  const type = document.getElementById('court-type').value;
+  const price = parseInt(document.getElementById('court-price').value);
+  const errEl = document.getElementById('court-form-error');
+  const btn = document.getElementById('btn-add-court');
+
+  errEl.textContent = '';
+
+  if (!name) { errEl.textContent = 'Court name is required.'; return; }
+  if (!price || price < 1) { errEl.textContent = 'Enter a valid price.'; return; }
+
+  const maxOrder = allCourts.reduce((m, c) => Math.max(m, c.sort_order), 0);
+
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+
+  try {
+    await createCourt({ name, type, price_per_hour: price, is_active: true, sort_order: maxOrder + 1 });
+    allCourts = await fetchCourts();
+    populateCourtDropdowns();
+    renderCourtsTab();
+    document.getElementById('court-name').value = '';
+    document.getElementById('court-price').value = '100';
+    showToast(`${name} added successfully.`);
+  } catch (e) {
+    errEl.textContent = 'Failed to add court. Try again.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '+ Add Court';
   }
 }
 
@@ -1662,6 +1744,7 @@ function renderApp() {
     renderLockCalendar();
   });
   document.getElementById('btn-lock-slots').addEventListener('click', lockSelectedSlots);
+  document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
   document.getElementById('btn-lock-all-time').addEventListener('click', () => {
     const allSelected = LOCK_TIME_SLOTS.every(s => selectedLockTimes.has(s));
     LOCK_TIME_SLOTS.forEach(s => toggleLockTime(s, !allSelected));
