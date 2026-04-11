@@ -2380,3 +2380,102 @@ tbody td {
 
   .filters-bar { padding: 0.625rem; }
 }
+
+/* ─── COURTS MANAGEMENT ─────────────────────────────────────────────────────── */
+
+.court-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  margin-bottom: 0.5rem;
+}
+
+.btn-add-court {
+  width: auto;
+  white-space: nowrap;
+}
+
+.courts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.court-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: #fff;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+
+.court-item.court-inactive {
+  opacity: 0.5;
+}
+
+.court-item-color {
+  width: 14px;
+  height: 40px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.court-item-info {
+  flex: 1;
+}
+
+.court-item-name {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #1e5c45;
+}
+
+.court-item-meta {
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 2px;
+}
+
+.court-item-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-deactivate {
+  background: #fff;
+  color: #c0392b;
+  border: 1.5px solid #c0392b;
+  padding: 0.35rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.btn-deactivate:hover {
+  background: #ffeaea;
+}
+
+.btn-activate {
+  background: #fff;
+  color: #1e5c45;
+  border: 1.5px solid #1e5c45;
+  padding: 0.35rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.btn-activate:hover {
+  background: #eaf5ef;
+}
