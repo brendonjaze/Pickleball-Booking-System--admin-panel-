@@ -1574,8 +1574,11 @@ function renderApp() {
               </select>
             </div>
             <div class="filter-group">
-              <label for="court-price">Price per Hour (₱)</label>
-              <input type="number" id="court-price" placeholder="100" min="1" value="100" />
+              <label for="court-price">Price per Hour</label>
+              <div class="price-input-wrapper">
+                <span class="price-prefix">₱</span>
+                <input type="number" id="court-price" placeholder="100" min="1" value="100" />
+              </div>
             </div>
             <button class="btn-primary btn-add-court" id="btn-add-court">+ Add Court</button>
           </div>
