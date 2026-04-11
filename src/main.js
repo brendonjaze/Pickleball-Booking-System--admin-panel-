@@ -210,6 +210,26 @@ async function deleteCourtLockGroup(groupId) {
   return sbFetch(`court_locks?lock_group=eq.${encodeURIComponent(groupId)}`, { method: 'DELETE' });
 }
 
+// ─── COURT MANAGEMENT API ─────────────────────────────────────────────────────
+
+async function fetchCourts() {
+  return sbFetch('courts?select=*&order=sort_order.asc');
+}
+
+async function createCourt(data) {
+  return sbFetch('courts', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+async function updateCourt(id, data) {
+  return sbFetch(`courts?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── STATE ────────────────────────────────────────────────────────────────────
 
 let allBookings = [];
