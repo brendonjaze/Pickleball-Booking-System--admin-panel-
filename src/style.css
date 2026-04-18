@@ -2560,6 +2560,150 @@ tbody td {
   }
 }
 
+/* ─── OPEN PLAY ─────────────────────────────────────────── */
+
+.open-play-editor {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-xs);
+  border: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.open-play-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.open-play-fields {
+  transition: opacity 0.2s;
+}
+
+.op-fields-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.open-play-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.open-play-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Registrations */
+.op-reg-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.op-reg-count { color: var(--primary); }
+
+.op-spots-left {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #27ae60;
+  background: #eaf5ef;
+  padding: 0.2rem 0.65rem;
+  border-radius: 20px;
+}
+
+.op-spots-left.op-full {
+  color: var(--danger);
+  background: var(--danger-light);
+}
+
+.op-reg-list {
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  overflow: hidden;
+}
+
+.op-reg-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+  transition: background 0.15s;
+}
+
+.op-reg-item:last-child { border-bottom: none; }
+.op-reg-item:hover { background: var(--bg-subtle); }
+
+.op-reg-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary-ghost);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.op-reg-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.op-reg-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.op-reg-phone {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.op-reg-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .open-play-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .open-play-actions button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 400px) {
+  .open-play-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ─── EDIT COURT MODAL ──────────────────────────────────── */
 
 .edit-court-modal-card {

@@ -209,6 +209,30 @@ async function deleteCourtLockGroup(groupId) {
   return sbFetch(`court_locks?lock_group=eq.${encodeURIComponent(groupId)}`, { method: 'DELETE' });
 }
 
+// ─── OPEN PLAY API ───────────────────────────────────────────────────────────
+
+async function fetchOpenPlaySession() {
+  const rows = await sbFetch('open_play_sessions?select=*&order=id.desc&limit=1');
+  return rows.length ? rows[0] : null;
+}
+
+async function upsertOpenPlaySession(id, data) {
+  if (id) {
+    return sbFetch(`open_play_sessions?id=eq.${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ ...data, updated_at: new Date().toISOString() }),
+    });
+  }
+  return sbFetch('open_play_sessions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+async function fetchOpenPlayRegistrations(sessionId) {
+  return sbFetch(`open_play_registrations?session_id=eq.${sessionId}&select=*&order=created_at.asc`);
+}
+
 // ─── COURT MANAGEMENT API ─────────────────────────────────────────────────────
 
 async function fetchCourts() {
@@ -738,7 +762,7 @@ function switchTab(tab) {
 
   if (tab === 'revenue') updateRevenue();
   if (tab === 'announcements') loadAnnouncement();
-  if (tab === 'courts') renderCourtsTab();
+  if (tab === 'courts') { renderCourtsTab(); loadOpenPlay(); }
   if (tab === 'locks') {
     renderLockCalendar();
     renderLockTimeGrid();
@@ -1158,6 +1182,135 @@ async function confirmDeleteLock() {
     showToast('Slots unlocked successfully.');
   } catch (e) {
     showToast(e.message || 'Failed to unlock slots.', true);
+    console.error(e);
+  }
+}
+
+// ─── OPEN PLAY LOGIC ─────────────────────────────────────────────────────────
+
+let currentOpenPlayId = null;
+
+function fmt12(timeStr) {
+  if (!timeStr) return '';
+  const [h, m] = timeStr.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+function updateOpenPlayFieldsState() {
+  const enabled = document.getElementById('open-play-enabled')?.checked;
+  const fields = document.getElementById('open-play-fields');
+  if (fields) fields.classList.toggle('op-fields-disabled', !enabled);
+}
+
+async function loadOpenPlay() {
+  const statusEl = document.getElementById('open-play-status');
+  if (!statusEl) return;
+  statusEl.textContent = 'Loading…';
+
+  try {
+    const session = await fetchOpenPlaySession();
+    if (session) {
+      currentOpenPlayId = session.id;
+      document.getElementById('open-play-enabled').checked = session.is_enabled ?? false;
+      document.getElementById('open-play-date').value = session.date || '';
+      document.getElementById('open-play-start').value = session.start_time || '';
+      document.getElementById('open-play-end').value = session.end_time || '';
+      document.getElementById('open-play-price').value = session.price_per_player ?? '';
+      document.getElementById('open-play-max').value = session.max_players ?? '';
+      statusEl.textContent = session.updated_at
+        ? `Last saved ${new Date(session.updated_at).toLocaleString()}`
+        : '';
+      updateOpenPlayFieldsState();
+      if (session.id) renderOpenPlayRegistrations(session.id, session.max_players);
+    } else {
+      currentOpenPlayId = null;
+      statusEl.textContent = 'No session yet — configure one below.';
+      updateOpenPlayFieldsState();
+    }
+  } catch (e) {
+    statusEl.textContent = 'Failed to load.';
+    console.error(e);
+  }
+}
+
+async function saveOpenPlay() {
+  const is_enabled = document.getElementById('open-play-enabled').checked;
+  const date = document.getElementById('open-play-date').value;
+  const start_time = document.getElementById('open-play-start').value;
+  const end_time = document.getElementById('open-play-end').value;
+  const price_per_player = parseInt(document.getElementById('open-play-price').value) || 0;
+  const max_players = parseInt(document.getElementById('open-play-max').value) || 0;
+  const btn = document.getElementById('btn-save-open-play');
+  const statusEl = document.getElementById('open-play-status');
+
+  if (is_enabled) {
+    if (!date) { showToast('Please set a date for open play.', true); return; }
+    if (!start_time || !end_time) { showToast('Please set start and end time.', true); return; }
+    if (max_players < 1) { showToast('Max players must be at least 1.', true); return; }
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    const result = await upsertOpenPlaySession(currentOpenPlayId, {
+      is_enabled, date, start_time, end_time, price_per_player, max_players,
+    });
+    if (!currentOpenPlayId && result?.length) {
+      currentOpenPlayId = result[0].id;
+    }
+    statusEl.textContent = `Saved ${new Date().toLocaleString()}`;
+    showToast(is_enabled ? 'Open play enabled and saved.' : 'Open play saved (disabled).');
+    if (currentOpenPlayId) renderOpenPlayRegistrations(currentOpenPlayId, max_players);
+  } catch (e) {
+    showToast(e.message || 'Failed to save open play.', true);
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Open Play';
+  }
+}
+
+async function renderOpenPlayRegistrations(sessionId, maxPlayers) {
+  const container = document.getElementById('open-play-registrations');
+  if (!container) return;
+
+  container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading registrations…</div>';
+
+  try {
+    const regs = await fetchOpenPlayRegistrations(sessionId);
+    const spotsLeft = maxPlayers - regs.length;
+
+    if (regs.length === 0) {
+      container.innerHTML = `
+        <div class="table-empty">
+          <div class="icon">📋</div>
+          <p>No registrations yet</p>
+          <div class="sub">Players will appear here once they sign up</div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="op-reg-header">
+        <span class="op-reg-count">${regs.length} registered</span>
+        <span class="op-spots-left ${spotsLeft <= 0 ? 'op-full' : ''}">${spotsLeft <= 0 ? 'Session Full' : `${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left`}</span>
+      </div>
+      <div class="op-reg-list">
+        ${regs.map((r, i) => `
+          <div class="op-reg-item">
+            <span class="op-reg-num">${i + 1}</span>
+            <div class="op-reg-info">
+              <span class="op-reg-name">${r.name || '—'}</span>
+              <span class="op-reg-phone">${r.phone || '—'}</span>
+            </div>
+            <span class="op-reg-time">${new Date(r.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+          </div>`).join('')}
+      </div>`;
+  } catch (e) {
+    container.innerHTML = '<div class="table-empty"><div class="icon">⚠️</div><p>Failed to load registrations</p></div>';
     console.error(e);
   }
 }
@@ -1654,6 +1807,62 @@ function renderApp() {
             <button class="btn-primary btn-add-court" id="btn-add-court">+ Add Court</button>
           </div>
           <div class="form-error" id="court-form-error"></div>
+
+          <div class="section-title" style="margin-top:2.5rem">🏃 Open Play</div>
+          <p class="section-desc">Set up a drop-in open play session. Players can sign up from the booking page when this is enabled.</p>
+
+          <div class="open-play-editor">
+            <div class="open-play-toolbar">
+              <label class="announcement-toggle">
+                <input type="checkbox" id="open-play-enabled" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Enable Open Play</span>
+              </label>
+              <span class="announcement-status" id="open-play-status"></span>
+            </div>
+
+            <div class="open-play-fields" id="open-play-fields">
+              <div class="open-play-grid">
+                <div class="input-group">
+                  <label for="open-play-date">Date</label>
+                  <input type="date" id="open-play-date" />
+                </div>
+                <div class="input-group">
+                  <label for="open-play-start">Start Time</label>
+                  <input type="time" id="open-play-start" />
+                </div>
+                <div class="input-group">
+                  <label for="open-play-end">End Time</label>
+                  <input type="time" id="open-play-end" />
+                </div>
+                <div class="input-group">
+                  <label for="open-play-price">Price per Player</label>
+                  <div class="price-input-wrapper">
+                    <span class="price-prefix">₱</span>
+                    <input type="number" id="open-play-price" min="0" placeholder="50" />
+                  </div>
+                </div>
+                <div class="input-group">
+                  <label for="open-play-max">Max Players</label>
+                  <input type="number" id="open-play-max" min="1" placeholder="20" />
+                </div>
+              </div>
+            </div>
+
+            <div class="open-play-actions">
+              <button class="btn-primary" id="btn-save-open-play" style="width:auto">Save Open Play</button>
+            </div>
+          </div>
+
+          <div class="section-title" style="margin-top:2rem">Registrations</div>
+          <div id="open-play-registrations">
+            <div class="table-empty">
+              <div class="icon">📋</div>
+              <p>No registrations yet</p>
+              <div class="sub">Save a session first to see sign-ups here</div>
+            </div>
+          </div>
+
         </div><!-- /tab-courts -->
 
       </main>
@@ -1861,6 +2070,10 @@ function renderApp() {
   });
   document.getElementById('btn-lock-slots').addEventListener('click', lockSelectedSlots);
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
+  // Open Play
+  document.getElementById('open-play-enabled').addEventListener('change', updateOpenPlayFieldsState);
+  document.getElementById('btn-save-open-play').addEventListener('click', saveOpenPlay);
+
   // Location type toggles
   ['edit-location-toggle', 'add-location-toggle'].forEach(id => {
     const toggle = document.getElementById(id);
