@@ -1166,6 +1166,62 @@ async function confirmDeleteLock() {
 
 const COURT_COLORS = ['#4a90d9', '#7b4ea6', '#c0392b', '#27ae60', '#e67e22'];
 
+let editingCourtId = null;
+
+function setLocationToggle(toggleId, value) {
+  const toggle = document.getElementById(toggleId);
+  if (!toggle) return;
+  toggle.querySelectorAll('.location-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
+  const hidden = toggle.querySelector('input[type="hidden"]');
+  if (hidden) hidden.value = value;
+}
+
+function openEditCourtModal(court) {
+  editingCourtId = court.id;
+  document.getElementById('edit-court-name').value = court.name;
+  setLocationToggle('edit-location-toggle', court.type);
+  document.getElementById('edit-court-price').value = court.price_per_hour;
+  document.getElementById('edit-court-error').textContent = '';
+  document.getElementById('edit-court-modal').classList.add('show');
+}
+
+function closeEditCourtModal() {
+  editingCourtId = null;
+  document.getElementById('edit-court-modal').classList.remove('show');
+}
+
+async function handleEditCourt() {
+  const name = document.getElementById('edit-court-name').value.trim();
+  const type = document.getElementById('edit-court-type').value;
+  const price = parseInt(document.getElementById('edit-court-price').value);
+  const errEl = document.getElementById('edit-court-error');
+  const btn = document.getElementById('btn-save-court');
+
+  errEl.textContent = '';
+
+  if (!name) { errEl.textContent = 'Court name is required.'; return; }
+  if (!price || price < 1) { errEl.textContent = 'Enter a valid price.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  try {
+    await updateCourt(editingCourtId, { name, type, price_per_hour: price });
+    allCourts = await fetchCourts();
+    populateCourtDropdowns();
+    renderCourtsTab();
+    closeEditCourtModal();
+    showToast('Court updated successfully.');
+  } catch (e) {
+    errEl.textContent = 'Failed to update court. Try again.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+  }
+}
+
 function renderCourtsTab() {
   const list = document.getElementById('courts-list');
   if (!list) return;
@@ -1185,6 +1241,7 @@ function renderCourtsTab() {
           <div class="court-item-meta">${court.type} · ₱${court.price_per_hour}/hr</div>
         </div>
         <div class="court-item-actions">
+          <button class="btn-court-edit" data-id="${court.id}">Edit</button>
           <button class="btn-court-toggle ${court.is_active ? 'btn-deactivate' : 'btn-activate'}"
             data-id="${court.id}" data-active="${court.is_active}">
             ${court.is_active ? 'Deactivate' : 'Activate'}
@@ -1192,6 +1249,13 @@ function renderCourtsTab() {
         </div>
       </div>`;
   }).join('');
+
+  list.querySelectorAll('.btn-court-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const court = allCourts.find(c => c.id === parseInt(btn.dataset.id));
+      if (court) openEditCourtModal(court);
+    });
+  });
 
   list.querySelectorAll('.btn-court-toggle').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -1567,11 +1631,18 @@ function renderApp() {
               <input type="text" id="court-name" placeholder="e.g. Court 5" />
             </div>
             <div class="filter-group">
-              <label for="court-type">Type</label>
-              <select id="court-type">
-                <option value="Indoor">Indoor</option>
-                <option value="Outdoor">Outdoor</option>
-              </select>
+              <label>Type</label>
+              <div class="location-type-toggle" id="add-location-toggle">
+                <button type="button" class="location-btn active" data-value="Indoor">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                  Indoor
+                </button>
+                <button type="button" class="location-btn" data-value="Outdoor">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                  Outdoor
+                </button>
+                <input type="hidden" id="court-type" value="Indoor" />
+              </div>
             </div>
             <div class="filter-group">
               <label for="court-price">Price per Hour</label>
@@ -1633,6 +1704,48 @@ function renderApp() {
         <div class="modal-actions">
           <button class="btn-cancel-modal" id="lock-modal-cancel">Keep Lock</button>
           <button class="btn-confirm-delete" id="lock-modal-confirm">Yes, Unlock</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Court Modal -->
+    <div class="modal-overlay" id="edit-court-modal">
+      <div class="modal-card edit-court-modal-card">
+        <div class="edit-court-modal-header">
+          <h2>Edit Court</h2>
+          <button class="modal-close" id="edit-court-modal-close">&times;</button>
+        </div>
+        <div class="edit-court-modal-body">
+          <div class="input-group">
+            <label for="edit-court-name">Court Name</label>
+            <input type="text" id="edit-court-name" placeholder="e.g. Court 1" />
+          </div>
+          <div class="input-group">
+            <label>Location Type</label>
+            <div class="location-type-toggle" id="edit-location-toggle">
+              <button type="button" class="location-btn active" data-value="Indoor">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Indoor
+              </button>
+              <button type="button" class="location-btn" data-value="Outdoor">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                Outdoor
+              </button>
+              <input type="hidden" id="edit-court-type" value="Indoor" />
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="edit-court-price">Price per Hour</label>
+            <div class="price-input-wrapper">
+              <span class="price-prefix">₱</span>
+              <input type="number" id="edit-court-price" min="1" placeholder="100" />
+            </div>
+          </div>
+          <div class="form-error" id="edit-court-error"></div>
+          <div class="modal-actions edit-court-actions">
+            <button class="btn-cancel-modal" id="edit-court-cancel">Cancel</button>
+            <button class="btn-primary btn-save-court-primary" id="btn-save-court">Save Changes</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1748,6 +1861,21 @@ function renderApp() {
   });
   document.getElementById('btn-lock-slots').addEventListener('click', lockSelectedSlots);
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
+  // Location type toggles
+  ['edit-location-toggle', 'add-location-toggle'].forEach(id => {
+    const toggle = document.getElementById(id);
+    if (!toggle) return;
+    toggle.querySelectorAll('.location-btn').forEach(btn => {
+      btn.addEventListener('click', () => setLocationToggle(id, btn.dataset.value));
+    });
+  });
+
+  document.getElementById('edit-court-modal-close').addEventListener('click', closeEditCourtModal);
+  document.getElementById('edit-court-cancel').addEventListener('click', closeEditCourtModal);
+  document.getElementById('btn-save-court').addEventListener('click', handleEditCourt);
+  document.getElementById('edit-court-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeEditCourtModal();
+  });
   document.getElementById('btn-lock-all-time').addEventListener('click', () => {
     const allSelected = LOCK_TIME_SLOTS.every(s => selectedLockTimes.has(s));
     LOCK_TIME_SLOTS.forEach(s => toggleLockTime(s, !allSelected));
