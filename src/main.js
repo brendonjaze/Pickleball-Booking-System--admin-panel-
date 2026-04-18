@@ -1237,9 +1237,9 @@ async function loadOpenPlay() {
 
 async function saveOpenPlay() {
   const is_enabled = document.getElementById('open-play-enabled').checked;
-  const date = document.getElementById('open-play-date').value;
-  const start_time = document.getElementById('open-play-start').value;
-  const end_time = document.getElementById('open-play-end').value;
+  const date = document.getElementById('open-play-date').value || null;
+  const start_time = document.getElementById('open-play-start').value || null;
+  const end_time = document.getElementById('open-play-end').value || null;
   const price_per_player = parseInt(document.getElementById('open-play-price').value) || 0;
   const max_players = parseInt(document.getElementById('open-play-max').value) || 0;
   const btn = document.getElementById('btn-save-open-play');
