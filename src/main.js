@@ -1103,7 +1103,6 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 
 function openLockMonthModal() {
   selectedLockMonths.clear();
-  document.getElementById('lock-month-reason').value = '';
   renderLockMonthGrid();
   document.getElementById('lock-month-modal').classList.add('show');
 }
@@ -1174,7 +1173,7 @@ function closeLockMonthConfirmModal() {
 }
 
 async function executeLockMonths() {
-  const reason = document.getElementById('lock-month-reason').value.trim() || 'Month Lock';
+  const reason = 'Month Lock';
   const courtIds = allCourts.map(c => c.id);
 
   if (courtIds.length === 0) {
@@ -2109,10 +2108,6 @@ function renderApp() {
         </div>
         <p class="lock-month-modal-desc">Select months to lock — all days, all time slots, all courts.</p>
         <div class="lock-month-grid" id="lock-month-grid"></div>
-        <div class="filter-group lock-month-reason-group">
-          <label for="lock-month-reason">Event / Reason (optional)</label>
-          <input type="text" id="lock-month-reason" placeholder="e.g. Tournament, Holiday…" />
-        </div>
         <div class="modal-actions" style="margin-top:1.25rem">
           <button class="btn-cancel-modal" id="lock-month-cancel">Cancel</button>
           <button class="btn-primary" id="btn-lock-month-next">Lock Selected Months</button>
