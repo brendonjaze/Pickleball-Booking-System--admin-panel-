@@ -191,13 +191,26 @@ async function upsertAnnouncement(id, title, content, is_visible) {
 // ─── COURT LOCK HELPERS ──────────────────────────────────────────────────────
 
 async function fetchCourtLocks() {
-  return sbFetch('court_locks?select=*&order=date.asc,time_slot.asc');
+  const today = todayStr();
+  const PAGE = 1000;
+  let offset = 0;
+  let result = [];
+  while (true) {
+    const page = await sbFetch(
+      `court_locks?select=*&date=gte.${today}&order=date.asc,time_slot.asc&limit=${PAGE}&offset=${offset}`
+    );
+    result = result.concat(page);
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return result;
 }
 
 async function createCourtLocks(locks) {
   return sbFetch('court_locks', {
     method: 'POST',
     body: JSON.stringify(locks),
+    headers: { 'Prefer': 'return=minimal' },
   });
 }
 
@@ -206,7 +219,10 @@ async function deleteCourtLock(id) {
 }
 
 async function deleteCourtLockGroup(groupId) {
-  return sbFetch(`court_locks?lock_group=eq.${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+  return sbFetch(`court_locks?lock_group=eq.${encodeURIComponent(groupId)}`, {
+    method: 'DELETE',
+    headers: { 'Prefer': 'return=minimal' },
+  });
 }
 
 // ─── OPEN PLAY API ───────────────────────────────────────────────────────────
@@ -268,6 +284,7 @@ let isDraggingTimes = false;
 let dragDateAdding = true;
 let dragTimeAdding = true;
 let pendingDeleteLockGroup = null;
+let selectedLockMonths = new Set();
 
 // ─── TOAST ────────────────────────────────────────────────────────────────────
 
@@ -552,7 +569,7 @@ function downloadPastBookingsCSV() {
     b.booking_ref,
     b.name || '',
     b.phone,
-    COURT_NAMES[b.court_id] || `Court ${b.court_id}`,
+    allCourts.find(c => c.id === b.court_id)?.name || `Court ${b.court_id}`,
     formatDisplayDate(b.date),
     b.time_range,
     b.total_hours,
@@ -1080,6 +1097,127 @@ async function lockSelectedSlots() {
   }
 }
 
+// ─── LOCK MONTH ──────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function openLockMonthModal() {
+  selectedLockMonths.clear();
+  document.getElementById('lock-month-reason').value = '';
+  renderLockMonthGrid();
+  document.getElementById('lock-month-modal').classList.add('show');
+}
+
+function closeLockMonthModal() {
+  document.getElementById('lock-month-modal').classList.remove('show');
+  selectedLockMonths.clear();
+}
+
+function renderLockMonthGrid() {
+  const grid = document.getElementById('lock-month-grid');
+  const now = new Date();
+  const year = now.getFullYear();
+  const currentMonthKey = `${year}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  grid.innerHTML = MONTH_NAMES.map((name, i) => {
+    const key = `${year}-${String(i + 1).padStart(2, '0')}`;
+    const isPast = key < currentMonthKey;
+    const isSelected = selectedLockMonths.has(key);
+    return `<button class="lock-month-btn${isSelected ? ' selected' : ''}${isPast ? ' past' : ''}" data-month="${key}">
+      <span class="lock-month-name">${name}</span>
+      <span class="lock-month-year">${year}</span>
+    </button>`;
+  }).join('');
+
+  grid.querySelectorAll('.lock-month-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.month;
+      if (selectedLockMonths.has(key)) {
+        selectedLockMonths.delete(key);
+        btn.classList.remove('selected');
+      } else {
+        selectedLockMonths.add(key);
+        btn.classList.add('selected');
+      }
+    });
+  });
+}
+
+function openLockMonthConfirmModal() {
+  if (selectedLockMonths.size === 0) {
+    showToast('Select at least one month.', true);
+    return;
+  }
+
+  const monthList = [...selectedLockMonths].sort().map(key => {
+    const [y, m] = key.split('-');
+    return `${MONTH_NAMES[parseInt(m) - 1]} ${y}`;
+  }).join(', ');
+
+  const totalDays = [...selectedLockMonths].reduce((sum, key) => {
+    const [y, m] = key.split('-').map(Number);
+    return sum + new Date(y, m, 0).getDate();
+  }, 0);
+
+  const courtCount = allCourts.length;
+  const slotCount = LOCK_TIME_SLOTS.length;
+
+  document.getElementById('lock-month-confirm-summary').innerHTML =
+    `<strong>${monthList}</strong> will be fully locked.<br>` +
+    `${totalDays} days × ${slotCount} time slots × ${courtCount} court${courtCount !== 1 ? 's' : ''} = <strong>${(totalDays * slotCount * courtCount).toLocaleString()} lock records</strong>.`;
+
+  document.getElementById('lock-month-confirm-modal').classList.add('show');
+}
+
+function closeLockMonthConfirmModal() {
+  document.getElementById('lock-month-confirm-modal').classList.remove('show');
+}
+
+async function executeLockMonths() {
+  const reason = document.getElementById('lock-month-reason').value.trim() || 'Month Lock';
+  const courtIds = allCourts.map(c => c.id);
+
+  if (courtIds.length === 0) {
+    showToast('No courts loaded. Reload the page and try again.', true);
+    return;
+  }
+
+  const locks = [];
+  for (const key of selectedLockMonths) {
+    const [year, month] = key.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const lockGroup = `month-lock-${key}-${Date.now()}`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      for (const slot of LOCK_TIME_SLOTS) {
+        for (const court_id of courtIds) {
+          locks.push({ date: dateStr, time_slot: slot, court_id, reason, lock_group: lockGroup });
+        }
+      }
+    }
+  }
+
+  const btn = document.getElementById('lock-month-confirm-ok');
+  btn.disabled = true;
+  btn.textContent = 'Locking…';
+
+  try {
+    const BATCH = 500;
+    for (let i = 0; i < locks.length; i += BATCH) {
+      await createCourtLocks(locks.slice(i, i + BATCH));
+    }
+    showToast(`Locked ${selectedLockMonths.size} month${selectedLockMonths.size !== 1 ? 's' : ''} successfully.`);
+    closeLockMonthConfirmModal();
+    closeLockMonthModal();
+    loadCourtLocks();
+  } catch (e) {
+    showToast(e.message || 'Failed to lock months.', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Yes, Lock All';
+  }
+}
+
 async function loadCourtLocks() {
   const container = document.getElementById('locks-list');
   if (!container) return;
@@ -1132,7 +1270,7 @@ function renderCourtLocks() {
       : `${formatDisplayDate(dates[0])} — ${formatDisplayDate(dates[dates.length - 1])} (${dates.length} days)`;
     const courtDisplay = courts.length === 3
       ? 'All Courts'
-      : courts.map(c => COURT_NAMES[c] || `Court ${c}`).join(', ');
+      : courts.map(c => allCourts.find(ct => ct.id === c)?.name || `Court ${c}`).join(', ');
 
     return `
       <div class="lock-card">
@@ -1712,8 +1850,13 @@ function renderApp() {
 
         <!-- ═══ COURT LOCK TAB ═══ -->
         <div class="tab-content" id="tab-locks">
-          <div class="section-title">🔒 Court Lock</div>
-          <p class="section-desc">Lock specific dates and times to prevent bookings. Drag to select multiple dates or time slots.</p>
+          <div class="lock-tab-header">
+            <div>
+              <div class="section-title" style="margin-bottom:0.25rem">🔒 Court Lock</div>
+              <p class="section-desc" style="margin-bottom:0">Lock specific dates and times to prevent bookings. Drag to select multiple dates or time slots.</p>
+            </div>
+            <button class="btn-lock-month" id="btn-lock-month">🗓️ Lock Month</button>
+          </div>
 
           <div class="lock-editor">
             <div class="lock-grid">
@@ -1722,9 +1865,7 @@ function renderApp() {
                 <div class="lock-panel-title">Select Dates</div>
                 <div class="lock-calendar">
                   <div class="lock-cal-header">
-                    <button class="lock-cal-nav" id="lock-cal-prev">&lsaquo;</button>
                     <span class="lock-cal-month" id="lock-cal-month"></span>
-                    <button class="lock-cal-nav" id="lock-cal-next">&rsaquo;</button>
                   </div>
                   <div class="lock-cal-weekdays">
                     <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
@@ -1959,6 +2100,39 @@ function renderApp() {
       </div>
     </div>
 
+    <!-- Lock Month Modal -->
+    <div class="modal-overlay" id="lock-month-modal">
+      <div class="modal-card lock-month-modal-card">
+        <div class="lock-month-modal-header">
+          <h2>🗓️ Lock Month</h2>
+          <button class="modal-close" id="lock-month-modal-close">&times;</button>
+        </div>
+        <p class="lock-month-modal-desc">Select months to lock — all days, all time slots, all courts.</p>
+        <div class="lock-month-grid" id="lock-month-grid"></div>
+        <div class="filter-group lock-month-reason-group">
+          <label for="lock-month-reason">Event / Reason (optional)</label>
+          <input type="text" id="lock-month-reason" placeholder="e.g. Tournament, Holiday…" />
+        </div>
+        <div class="modal-actions" style="margin-top:1.25rem">
+          <button class="btn-cancel-modal" id="lock-month-cancel">Cancel</button>
+          <button class="btn-primary" id="btn-lock-month-next">Lock Selected Months</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lock Month Confirm Modal -->
+    <div class="modal-overlay" id="lock-month-confirm-modal">
+      <div class="modal-card">
+        <div class="modal-icon">🔒</div>
+        <h2>Lock These Months?</h2>
+        <p id="lock-month-confirm-summary" style="line-height:1.7"></p>
+        <div class="modal-actions" style="margin-top:1.5rem">
+          <button class="btn-cancel-modal" id="lock-month-confirm-cancel">Cancel</button>
+          <button class="btn-confirm-delete" id="lock-month-confirm-ok">Yes, Lock All</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toast container -->
     <div class="toast-container"></div>
   `;
@@ -2060,15 +2234,19 @@ function renderApp() {
   document.getElementById('announcement-content').addEventListener('input', updateAnnouncementPreview);
 
   // Court Lock
-  document.getElementById('lock-cal-prev').addEventListener('click', () => {
-    lockCalendarDate.setMonth(lockCalendarDate.getMonth() - 1);
-    renderLockCalendar();
-  });
-  document.getElementById('lock-cal-next').addEventListener('click', () => {
-    lockCalendarDate.setMonth(lockCalendarDate.getMonth() + 1);
-    renderLockCalendar();
-  });
   document.getElementById('btn-lock-slots').addEventListener('click', lockSelectedSlots);
+  document.getElementById('btn-lock-month').addEventListener('click', openLockMonthModal);
+  document.getElementById('lock-month-modal-close').addEventListener('click', closeLockMonthModal);
+  document.getElementById('lock-month-cancel').addEventListener('click', closeLockMonthModal);
+  document.getElementById('lock-month-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeLockMonthModal();
+  });
+  document.getElementById('btn-lock-month-next').addEventListener('click', openLockMonthConfirmModal);
+  document.getElementById('lock-month-confirm-cancel').addEventListener('click', closeLockMonthConfirmModal);
+  document.getElementById('lock-month-confirm-ok').addEventListener('click', executeLockMonths);
+  document.getElementById('lock-month-confirm-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeLockMonthConfirmModal();
+  });
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
   // Open Play
   document.getElementById('open-play-enabled').addEventListener('change', updateOpenPlayFieldsState);

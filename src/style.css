@@ -2853,3 +2853,144 @@ tbody td {
     text-align: center;
   }
 }
+
+/* ─── LOCK TAB HEADER ──────────────────────────────── */
+
+.lock-tab-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.lock-tab-header .section-title {
+  margin-bottom: 0.25rem;
+}
+
+.btn-lock-month {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  background: var(--primary);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+
+.btn-lock-month:hover {
+  background: var(--primary-dark);
+}
+
+/* ─── LOCK MONTH MODAL ─────────────────────────────── */
+
+.lock-month-modal-card {
+  max-width: 480px;
+  width: 100%;
+  text-align: left;
+  padding: 1.75rem 1.75rem 1.5rem;
+}
+
+.lock-month-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.lock-month-modal-header h2 {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.lock-month-modal-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+  line-height: 1.5;
+}
+
+.lock-month-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.lock-month-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.65rem 0.4rem;
+  background: var(--bg);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: 'Montserrat', sans-serif;
+  transition: all var(--transition);
+}
+
+.lock-month-btn:hover {
+  border-color: var(--primary);
+  background: var(--accent);
+}
+
+.lock-month-btn.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--white);
+}
+
+.lock-month-btn.past {
+  opacity: 0.55;
+}
+
+.lock-month-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.lock-month-year {
+  font-size: 0.66rem;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.lock-month-btn.selected .lock-month-year {
+  opacity: 0.85;
+}
+
+.lock-month-reason-group {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 480px) {
+  .lock-month-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .lock-month-modal-card {
+    padding: 1.25rem 1rem 1rem;
+  }
+
+  .lock-tab-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .btn-lock-month {
+    width: 100%;
+    justify-content: center;
+  }
+}
