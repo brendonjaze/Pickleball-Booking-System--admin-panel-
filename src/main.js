@@ -779,7 +779,8 @@ function switchTab(tab) {
 
   if (tab === 'revenue') updateRevenue();
   if (tab === 'announcements') loadAnnouncement();
-  if (tab === 'courts') { renderCourtsTab(); loadOpenPlay(); }
+  if (tab === 'courts') renderCourtsTab();
+  if (tab === 'open-play') loadOpenPlay();
   if (tab === 'locks') {
     renderLockCalendar();
     renderLockTimeGrid();
@@ -1686,6 +1687,10 @@ function renderApp() {
             <span class="tab-icon">🔒</span>
             Court Lock
           </button>
+          <button class="tab-btn" data-tab="open-play">
+            <span class="tab-icon">🏃</span>
+            Open Play
+          </button>
           <button class="tab-btn" data-tab="courts">
             <span class="tab-icon">🏓</span>
             Courts
@@ -1948,7 +1953,11 @@ function renderApp() {
           </div>
           <div class="form-error" id="court-form-error"></div>
 
-          <div class="section-title" style="margin-top:2.5rem">🏃 Open Play</div>
+        </div><!-- /tab-courts -->
+
+        <!-- ═══ OPEN PLAY TAB ═══ -->
+        <div class="tab-content" id="tab-open-play">
+          <div class="section-title">🏃 Open Play</div>
           <p class="section-desc">Set up a drop-in open play session. Players can sign up from the booking page when this is enabled.</p>
 
           <div class="open-play-editor">
@@ -2003,7 +2012,7 @@ function renderApp() {
             </div>
           </div>
 
-        </div><!-- /tab-courts -->
+        </div><!-- /tab-open-play -->
 
       </main>
     </div>
