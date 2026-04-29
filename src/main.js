@@ -228,7 +228,7 @@ async function deleteCourtLockGroup(groupId) {
 // ─── OPEN PLAY API ───────────────────────────────────────────────────────────
 
 async function fetchOpenPlaySession() {
-  const rows = await sbFetch('open_play_sessions?select=*&order=id.desc&limit=1');
+  const rows = await sbFetch('open_play_sessions?select=*&order=created_at.desc&limit=1');
   return rows.length ? rows[0] : null;
 }
 
@@ -241,12 +241,12 @@ async function upsertOpenPlaySession(id, data) {
   }
   return sbFetch('open_play_sessions', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify({ ...data, updated_at: new Date().toISOString() }),
   });
 }
 
 async function fetchOpenPlayRegistrations(sessionId) {
-  return sbFetch(`open_play_registrations?session_id=eq.${sessionId}&select=*&order=created_at.asc`);
+  return sbFetch(`open_play_queue?session_id=eq.${sessionId}&select=*`);
 }
 
 // ─── COURT MANAGEMENT API ─────────────────────────────────────────────────────
@@ -1441,8 +1441,8 @@ async function renderOpenPlayRegistrations(sessionId, maxPlayers) {
           <div class="op-reg-item">
             <span class="op-reg-num">${i + 1}</span>
             <div class="op-reg-info">
-              <span class="op-reg-name">${r.name || '—'}</span>
-              <span class="op-reg-phone">${r.phone || '—'}</span>
+              <span class="op-reg-name">${r.player_name || '—'}</span>
+              <span class="op-reg-phone">${r.mobile || '—'}</span>
             </div>
             <span class="op-reg-time">${new Date(r.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
           </div>`).join('')}
@@ -1869,7 +1869,9 @@ function renderApp() {
                 <div class="lock-panel-title">Select Dates</div>
                 <div class="lock-calendar">
                   <div class="lock-cal-header">
+                    <button class="lock-cal-nav" id="lock-cal-prev">&#8249;</button>
                     <span class="lock-cal-month" id="lock-cal-month"></span>
+                    <button class="lock-cal-nav" id="lock-cal-next">&#8250;</button>
                   </div>
                   <div class="lock-cal-weekdays">
                     <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
@@ -2238,6 +2240,18 @@ function renderApp() {
   document.getElementById('announcement-content').addEventListener('input', updateAnnouncementPreview);
 
   // Court Lock
+  document.getElementById('lock-cal-prev').addEventListener('click', () => {
+    const today = new Date();
+    if (lockCalendarDate.getFullYear() === today.getFullYear() && lockCalendarDate.getMonth() === today.getMonth()) return;
+    lockCalendarDate.setMonth(lockCalendarDate.getMonth() - 1);
+    renderLockCalendar();
+  });
+  document.getElementById('lock-cal-next').addEventListener('click', () => {
+    const maxDate = new Date(new Date().getFullYear(), 11, 1); // December of current year
+    if (lockCalendarDate >= maxDate) return;
+    lockCalendarDate.setMonth(lockCalendarDate.getMonth() + 1);
+    renderLockCalendar();
+  });
   document.getElementById('btn-lock-slots').addEventListener('click', lockSelectedSlots);
   document.getElementById('btn-lock-month').addEventListener('click', openLockMonthModal);
   document.getElementById('lock-month-modal-close').addEventListener('click', closeLockMonthModal);
@@ -2253,7 +2267,10 @@ function renderApp() {
   });
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
   // Open Play
-  document.getElementById('open-play-enabled').addEventListener('change', updateOpenPlayFieldsState);
+  document.getElementById('open-play-enabled').addEventListener('change', () => {
+    updateOpenPlayFieldsState();
+    saveOpenPlay();
+  });
   document.getElementById('btn-save-open-play').addEventListener('click', saveOpenPlay);
 
   // Location type toggles
