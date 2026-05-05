@@ -2706,23 +2706,6 @@ tbody td {
   color: var(--danger);
 }
 
-.open-play-session-block {
-  margin-bottom: 0.5rem;
-}
-
-.open-play-session-label {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--primary);
-  margin-bottom: 0.85rem;
-  letter-spacing: 0.01em;
-}
-
-.open-play-divider {
-  border: none;
-  border-top: 2px dashed var(--border-light);
-  margin: 2rem 0;
-}
 
 @media (max-width: 600px) {
   .open-play-grid {

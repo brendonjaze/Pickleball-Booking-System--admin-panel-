@@ -210,7 +210,7 @@ async function createCourtLocks(locks) {
   return sbFetch('court_locks', {
     method: 'POST',
     body: JSON.stringify(locks),
-    headers: { 'Prefer': 'return=minimal' },
+    headers: { 'Prefer': 'return=minimal,resolution=ignore-duplicates' },
   });
 }
 
@@ -1211,10 +1211,19 @@ async function executeLockMonths() {
 
   try {
     const BATCH = 500;
+    let failed = 0;
     for (let i = 0; i < locks.length; i += BATCH) {
-      await createCourtLocks(locks.slice(i, i + BATCH));
+      try {
+        await createCourtLocks(locks.slice(i, i + BATCH));
+      } catch {
+        failed++;
+      }
     }
-    showToast(`Locked ${selectedLockMonths.size} month${selectedLockMonths.size !== 1 ? 's' : ''} successfully.`);
+    if (failed > 0) {
+      showToast(`Partially locked — ${failed} batch(es) failed. Try again to fill gaps.`, true);
+    } else {
+      showToast(`Locked ${selectedLockMonths.size} month${selectedLockMonths.size !== 1 ? 's' : ''} successfully.`);
+    }
     closeLockMonthConfirmModal();
     closeLockMonthModal();
     loadCourtLocks();
@@ -1334,7 +1343,6 @@ async function confirmDeleteLock() {
 
 // ─── OPEN PLAY LOGIC ─────────────────────────────────────────────────────────
 
-let currentMorningOpenPlayId = null;
 let currentNightOpenPlayId = null;
 
 function fmt12(timeStr) {
@@ -1351,7 +1359,8 @@ function updateOpenPlayFieldsState(type) {
   if (fields) fields.classList.toggle('op-fields-disabled', !enabled);
 }
 
-async function loadOpenPlaySession(type) {
+async function loadOpenPlay() {
+  const type = 'night';
   const statusEl = document.getElementById(`open-play-status-${type}`);
   if (!statusEl) return;
   statusEl.textContent = 'Loading…';
@@ -1359,8 +1368,7 @@ async function loadOpenPlaySession(type) {
   try {
     const session = await fetchOpenPlaySession(type);
     if (session) {
-      if (type === 'morning') currentMorningOpenPlayId = session.id;
-      else currentNightOpenPlayId = session.id;
+      currentNightOpenPlayId = session.id;
       document.getElementById(`open-play-enabled-${type}`).checked = session.is_enabled ?? false;
       document.getElementById(`open-play-date-${type}`).value = session.date || '';
       document.getElementById(`open-play-start-${type}`).value = session.start_time || '';
@@ -1373,8 +1381,7 @@ async function loadOpenPlaySession(type) {
       updateOpenPlayFieldsState(type);
       if (session.id) renderOpenPlayRegistrations(type, session.id, session.max_players);
     } else {
-      if (type === 'morning') currentMorningOpenPlayId = null;
-      else currentNightOpenPlayId = null;
+      currentNightOpenPlayId = null;
       statusEl.textContent = 'No session yet — configure one below.';
       updateOpenPlayFieldsState(type);
     }
@@ -1384,12 +1391,7 @@ async function loadOpenPlaySession(type) {
   }
 }
 
-async function loadOpenPlay() {
-  await Promise.all([loadOpenPlaySession('morning'), loadOpenPlaySession('night')]);
-}
-
 async function saveOpenPlay(type) {
-  const currentId = type === 'morning' ? currentMorningOpenPlayId : currentNightOpenPlayId;
   const is_enabled = document.getElementById(`open-play-enabled-${type}`).checked;
   const date = document.getElementById(`open-play-date-${type}`).value || null;
   const start_time = document.getElementById(`open-play-start-${type}`).value || null;
@@ -1398,10 +1400,9 @@ async function saveOpenPlay(type) {
   const max_players = parseInt(document.getElementById(`open-play-max-${type}`).value) || 0;
   const btn = document.getElementById(`btn-save-open-play-${type}`);
   const statusEl = document.getElementById(`open-play-status-${type}`);
-  const label = type === 'morning' ? 'Morning open play' : 'Night open play';
 
   if (is_enabled) {
-    if (!date) { showToast(`Please set a date for ${label.toLowerCase()}.`, true); return; }
+    if (!date) { showToast('Please set a date for open play.', true); return; }
     if (!start_time || !end_time) { showToast('Please set start and end time.', true); return; }
     if (max_players < 1) { showToast('Max players must be at least 1.', true); return; }
   }
@@ -1410,17 +1411,15 @@ async function saveOpenPlay(type) {
   btn.textContent = 'Saving…';
 
   try {
-    const result = await upsertOpenPlaySession(currentId, {
-      is_enabled, date, start_time, end_time, price_per_player, max_players, session_type: type,
+    const result = await upsertOpenPlaySession(currentNightOpenPlayId, {
+      is_enabled, date, start_time, end_time, price_per_player, max_players, session_type: 'night',
     });
-    if (!currentId && result?.length) {
-      if (type === 'morning') currentMorningOpenPlayId = result[0].id;
-      else currentNightOpenPlayId = result[0].id;
+    if (!currentNightOpenPlayId && result?.length) {
+      currentNightOpenPlayId = result[0].id;
     }
-    const newId = type === 'morning' ? currentMorningOpenPlayId : currentNightOpenPlayId;
     statusEl.textContent = `Last saved ${new Date().toLocaleString()}`;
-    showToast(is_enabled ? `${label} enabled and saved.` : `${label} saved (disabled).`);
-    if (newId) renderOpenPlayRegistrations(type, newId, max_players);
+    showToast(is_enabled ? 'Open play enabled and saved.' : 'Open play saved (disabled).');
+    if (currentNightOpenPlayId) renderOpenPlayRegistrations(type, currentNightOpenPlayId, max_players);
   } catch (e) {
     showToast(e.message || 'Failed to save open play.', true);
     console.error(e);
@@ -1996,119 +1995,57 @@ function renderApp() {
         <!-- ═══ OPEN PLAY TAB ═══ -->
         <div class="tab-content" id="tab-open-play">
           <div class="section-title">🏃 Open Play</div>
-          <p class="section-desc">Set up drop-in open play sessions. Players can sign up from the booking page when a session is enabled.</p>
+          <p class="section-desc">Set up a drop-in open play session. Players can sign up from the booking page when this is enabled.</p>
 
-          <!-- Morning Open Play -->
-          <div class="open-play-session-block">
-            <div class="open-play-session-label">🌅 Morning Open Play</div>
-            <div class="open-play-editor">
-              <div class="open-play-toolbar">
-                <label class="announcement-toggle">
-                  <input type="checkbox" id="open-play-enabled-morning" />
-                  <span class="toggle-slider"></span>
-                  <span class="toggle-label">Enable Morning Open Play</span>
-                </label>
-                <span class="announcement-status" id="open-play-status-morning"></span>
-              </div>
+          <div class="open-play-editor">
+            <div class="open-play-toolbar">
+              <label class="announcement-toggle">
+                <input type="checkbox" id="open-play-enabled-night" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Enable Open Play</span>
+              </label>
+              <span class="announcement-status" id="open-play-status-night"></span>
+            </div>
 
-              <div class="open-play-fields" id="open-play-fields-morning">
-                <div class="open-play-grid">
-                  <div class="input-group">
-                    <label for="open-play-date-morning">Date</label>
-                    <input type="date" id="open-play-date-morning" />
-                  </div>
-                  <div class="input-group">
-                    <label for="open-play-start-morning">Start Time</label>
-                    <input type="time" id="open-play-start-morning" />
-                  </div>
-                  <div class="input-group">
-                    <label for="open-play-end-morning">End Time</label>
-                    <input type="time" id="open-play-end-morning" />
-                  </div>
-                  <div class="input-group">
-                    <label for="open-play-price-morning">Price per Player</label>
-                    <div class="price-input-wrapper">
-                      <span class="price-prefix">₱</span>
-                      <input type="number" id="open-play-price-morning" min="0" placeholder="50" />
-                    </div>
-                  </div>
-                  <div class="input-group">
-                    <label for="open-play-max-morning">Max Players</label>
-                    <input type="number" id="open-play-max-morning" min="1" placeholder="20" />
+            <div class="open-play-fields" id="open-play-fields-night">
+              <div class="open-play-grid">
+                <div class="input-group">
+                  <label for="open-play-date-night">Date</label>
+                  <input type="date" id="open-play-date-night" />
+                </div>
+                <div class="input-group">
+                  <label for="open-play-start-night">Start Time</label>
+                  <input type="time" id="open-play-start-night" />
+                </div>
+                <div class="input-group">
+                  <label for="open-play-end-night">End Time</label>
+                  <input type="time" id="open-play-end-night" />
+                </div>
+                <div class="input-group">
+                  <label for="open-play-price-night">Price per Player</label>
+                  <div class="price-input-wrapper">
+                    <span class="price-prefix">₱</span>
+                    <input type="number" id="open-play-price-night" min="0" placeholder="50" />
                   </div>
                 </div>
-              </div>
-
-              <div class="open-play-actions">
-                <button class="btn-primary" id="btn-save-open-play-morning" style="width:auto">Save Open Play</button>
+                <div class="input-group">
+                  <label for="open-play-max-night">Max Players</label>
+                  <input type="number" id="open-play-max-night" min="1" placeholder="20" />
+                </div>
               </div>
             </div>
 
-            <div class="section-title" style="margin-top:1.5rem">Registrations</div>
-            <div id="open-play-registrations-morning">
-              <div class="table-empty">
-                <div class="icon">📋</div>
-                <p>No registrations yet</p>
-                <div class="sub">Save a session first to see sign-ups here</div>
-              </div>
+            <div class="open-play-actions">
+              <button class="btn-primary" id="btn-save-open-play-night" style="width:auto">Save Open Play</button>
             </div>
           </div>
 
-          <div class="open-play-divider"></div>
-
-          <!-- Night Open Play -->
-          <div class="open-play-session-block">
-            <div class="open-play-session-label">🌙 Night Open Play</div>
-            <div class="open-play-editor">
-              <div class="open-play-toolbar">
-                <label class="announcement-toggle">
-                  <input type="checkbox" id="open-play-enabled-night" />
-                  <span class="toggle-slider"></span>
-                  <span class="toggle-label">Enable Night Open Play</span>
-                </label>
-                <span class="announcement-status" id="open-play-status-night"></span>
-              </div>
-
-              <div class="open-play-fields" id="open-play-fields-night">
-                <div class="open-play-grid">
-                  <div class="input-group">
-                    <label for="open-play-date-night">Date</label>
-                    <input type="date" id="open-play-date-night" />
-                  </div>
-                  <div class="input-group">
-                    <label for="open-play-start-night">Start Time</label>
-                    <input type="time" id="open-play-start-night" />
-                  </div>
-                  <div class="input-group">
-                    <label for="open-play-end-night">End Time</label>
-                    <input type="time" id="open-play-end-night" />
-                  </div>
-                  <div class="input-group">
-                    <label for="open-play-price-night">Price per Player</label>
-                    <div class="price-input-wrapper">
-                      <span class="price-prefix">₱</span>
-                      <input type="number" id="open-play-price-night" min="0" placeholder="50" />
-                    </div>
-                  </div>
-                  <div class="input-group">
-                    <label for="open-play-max-night">Max Players</label>
-                    <input type="number" id="open-play-max-night" min="1" placeholder="20" />
-                  </div>
-                </div>
-              </div>
-
-              <div class="open-play-actions">
-                <button class="btn-primary" id="btn-save-open-play-night" style="width:auto">Save Open Play</button>
-              </div>
-            </div>
-
-            <div class="section-title" style="margin-top:1.5rem">Registrations</div>
-            <div id="open-play-registrations-night">
-              <div class="table-empty">
-                <div class="icon">📋</div>
-                <p>No registrations yet</p>
-                <div class="sub">Save a session first to see sign-ups here</div>
-              </div>
+          <div class="section-title" style="margin-top:2rem">Registrations</div>
+          <div id="open-play-registrations-night">
+            <div class="table-empty">
+              <div class="icon">📋</div>
+              <p>No registrations yet</p>
+              <div class="sub">Save a session first to see sign-ups here</div>
             </div>
           </div>
 
@@ -2365,13 +2302,11 @@ function renderApp() {
   });
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
   // Open Play
-  ['morning', 'night'].forEach(type => {
-    document.getElementById(`open-play-enabled-${type}`).addEventListener('change', () => {
-      updateOpenPlayFieldsState(type);
-      saveOpenPlay(type);
-    });
-    document.getElementById(`btn-save-open-play-${type}`).addEventListener('click', () => saveOpenPlay(type));
+  document.getElementById('open-play-enabled-night').addEventListener('change', () => {
+    updateOpenPlayFieldsState('night');
+    saveOpenPlay('night');
   });
+  document.getElementById('btn-save-open-play-night').addEventListener('click', () => saveOpenPlay('night'));
 
   // Location type toggles
   ['edit-location-toggle', 'add-location-toggle'].forEach(id => {
