@@ -2688,6 +2688,42 @@ tbody td {
   white-space: nowrap;
 }
 
+.op-reg-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.op-reg-delete:hover {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.open-play-session-block {
+  margin-bottom: 0.5rem;
+}
+
+.open-play-session-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 0.85rem;
+  letter-spacing: 0.01em;
+}
+
+.open-play-divider {
+  border: none;
+  border-top: 2px dashed var(--border-light);
+  margin: 2rem 0;
+}
+
 @media (max-width: 600px) {
   .open-play-grid {
     grid-template-columns: 1fr 1fr;
