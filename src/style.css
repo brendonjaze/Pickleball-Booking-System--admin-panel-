@@ -2562,43 +2562,152 @@ tbody td {
 
 /* ─── OPEN PLAY ─────────────────────────────────────────── */
 
-.open-play-editor {
+.op-tab-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.btn-add-schedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 50px;
+  padding: 0.65rem 1.4rem;
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(14, 116, 144, 0.35);
+  transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+}
+
+.btn-add-schedule:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 5px 16px rgba(14, 116, 144, 0.45);
+  transform: translateY(-1px);
+}
+
+.btn-add-schedule:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 6px rgba(14, 116, 144, 0.3);
+}
+
+.btn-add-schedule-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.op-session-row {
   background: var(--white);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  box-shadow: var(--shadow-xs);
   border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.op-session-new {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
+}
+
+.op-session-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  cursor: pointer;
+}
+
+.op-toggle-group {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.4rem;
 }
 
-.open-play-toolbar {
-  display: flex;
+.op-toggle {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+  cursor: pointer;
+  user-select: none;
 }
 
-.open-play-fields {
-  transition: opacity 0.2s;
+.op-toggle input[type="checkbox"] {
+  display: none;
 }
 
-.op-fields-disabled {
-  opacity: 0.4;
-  pointer-events: none;
+.op-toggle-track {
+  width: 44px;
+  height: 26px;
+  background: #94a3b8;
+  border-radius: 13px;
+  position: relative;
+  transition: background 0.2s;
+  display: block;
 }
 
-.open-play-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1rem;
+.op-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  transition: transform 0.2s;
+  display: block;
 }
 
-.open-play-actions {
+.op-toggle input:checked + .op-toggle-track {
+  background: var(--primary);
+}
+
+.op-toggle input:checked + .op-toggle-track .op-toggle-thumb {
+  transform: translateX(18px);
+}
+
+.op-session-actions {
   display: flex;
+  gap: 0.75rem;
   justify-content: flex-end;
+  margin-top: 1rem;
+  align-items: center;
+}
+
+.btn-icon-danger {
+  background: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+}
+
+.btn-icon-danger:hover {
+  background: var(--danger-light);
+}
+
+.op-session-status {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.4rem;
+  text-align: right;
+}
+
+.op-registrations-panel {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border-light);
+  padding-top: 1rem;
 }
 
 /* Registrations */
@@ -2708,17 +2817,13 @@ tbody td {
 
 
 @media (max-width: 600px) {
-  .open-play-grid {
+  .op-session-fields {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .open-play-actions button {
-    width: 100%;
   }
 }
 
 @media (max-width: 400px) {
-  .open-play-grid {
+  .op-session-fields {
     grid-template-columns: 1fr;
   }
 }

@@ -227,9 +227,8 @@ async function deleteCourtLockGroup(groupId) {
 
 // ─── OPEN PLAY API ───────────────────────────────────────────────────────────
 
-async function fetchOpenPlaySession(sessionType) {
-  const rows = await sbFetch(`open_play_sessions?select=*&session_type=eq.${sessionType}&order=created_at.desc&limit=1`);
-  return rows.length ? rows[0] : null;
+async function fetchAllOpenPlaySessions() {
+  return sbFetch('open_play_sessions?deleted_at=is.null&order=date.asc,start_time.asc&select=*');
 }
 
 async function upsertOpenPlaySession(id, data) {
@@ -242,6 +241,13 @@ async function upsertOpenPlaySession(id, data) {
   return sbFetch('open_play_sessions', {
     method: 'POST',
     body: JSON.stringify({ ...data, updated_at: new Date().toISOString() }),
+  });
+}
+
+async function softDeleteOpenPlaySession(id) {
+  return sbFetch(`open_play_sessions?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ deleted_at: new Date().toISOString() }),
   });
 }
 
@@ -1343,8 +1349,6 @@ async function confirmDeleteLock() {
 
 // ─── OPEN PLAY LOGIC ─────────────────────────────────────────────────────────
 
-let currentNightOpenPlayId = null;
-
 function fmt12(timeStr) {
   if (!timeStr) return '';
   const [h, m] = timeStr.split(':').map(Number);
@@ -1353,56 +1357,107 @@ function fmt12(timeStr) {
   return `${hour}:${String(m).padStart(2, '0')} ${period}`;
 }
 
-function updateOpenPlayFieldsState(type) {
-  const enabled = document.getElementById(`open-play-enabled-${type}`)?.checked;
-  const fields = document.getElementById(`open-play-fields-${type}`);
-  if (fields) fields.classList.toggle('op-fields-disabled', !enabled);
-}
-
 async function loadOpenPlay() {
-  const type = 'night';
-  const statusEl = document.getElementById(`open-play-status-${type}`);
-  if (!statusEl) return;
-  statusEl.textContent = 'Loading…';
-
+  const container = document.getElementById('open-play-list');
+  if (!container) return;
+  container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading…</div>';
   try {
-    const session = await fetchOpenPlaySession(type);
-    if (session) {
-      currentNightOpenPlayId = session.id;
-      document.getElementById(`open-play-enabled-${type}`).checked = session.is_enabled ?? false;
-      document.getElementById(`open-play-date-${type}`).value = session.date || '';
-      document.getElementById(`open-play-start-${type}`).value = session.start_time || '';
-      document.getElementById(`open-play-end-${type}`).value = session.end_time || '';
-      document.getElementById(`open-play-price-${type}`).value = session.price_per_player ?? '';
-      document.getElementById(`open-play-max-${type}`).value = session.max_players ?? '';
-      statusEl.textContent = session.updated_at
-        ? `Last saved ${new Date(session.updated_at).toLocaleString()}`
-        : '';
-      updateOpenPlayFieldsState(type);
-      if (session.id) renderOpenPlayRegistrations(type, session.id, session.max_players);
-    } else {
-      currentNightOpenPlayId = null;
-      statusEl.textContent = 'No session yet — configure one below.';
-      updateOpenPlayFieldsState(type);
-    }
+    const sessions = await fetchAllOpenPlaySessions();
+    renderOpenPlayTable(sessions);
   } catch (e) {
-    statusEl.textContent = 'Failed to load.';
+    container.innerHTML = '<div class="table-empty"><div class="icon">⚠️</div><p>Failed to load sessions</p></div>';
     console.error(e);
   }
 }
 
-async function saveOpenPlay(type) {
-  const is_enabled = document.getElementById(`open-play-enabled-${type}`).checked;
-  const date = document.getElementById(`open-play-date-${type}`).value || null;
-  const start_time = document.getElementById(`open-play-start-${type}`).value || null;
-  const end_time = document.getElementById(`open-play-end-${type}`).value || null;
-  const price_per_player = parseInt(document.getElementById(`open-play-price-${type}`).value) || 0;
-  const max_players = parseInt(document.getElementById(`open-play-max-${type}`).value) || 0;
-  const btn = document.getElementById(`btn-save-open-play-${type}`);
-  const statusEl = document.getElementById(`open-play-status-${type}`);
+function renderOpenPlayTable(sessions) {
+  const container = document.getElementById('open-play-list');
+  if (!container) return;
+
+  if (sessions.length === 0) {
+    container.innerHTML = `
+      <div class="table-empty">
+        <div class="icon">📋</div>
+        <p>No schedules yet</p>
+        <div class="sub">Click "+ Add Schedule" to create one</div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = sessions.map(s => renderSessionRow(s)).join('');
+  attachRowListeners(container);
+}
+
+function renderSessionRow(s = {}) {
+  const id = s.id || '';
+  const isNew = !id;
+  return `
+    <div class="op-session-row${isNew ? ' op-session-new' : ''}" data-id="${id}">
+      <div class="op-session-fields">
+        <div class="input-group">
+          <label>Date</label>
+          <input type="date" class="op-date" value="${s.date || ''}" />
+        </div>
+        <div class="input-group">
+          <label>Start</label>
+          <input type="time" class="op-start" value="${s.start_time || ''}" />
+        </div>
+        <div class="input-group">
+          <label>End</label>
+          <input type="time" class="op-end" value="${s.end_time || ''}" />
+        </div>
+        <div class="input-group">
+          <label>Price (₱)</label>
+          <input type="number" class="op-price" min="0" placeholder="50" value="${s.price_per_player ?? ''}" />
+        </div>
+        <div class="input-group">
+          <label>Max Players</label>
+          <input type="number" class="op-max" min="1" placeholder="20" value="${s.max_players ?? ''}" />
+        </div>
+        <div class="input-group op-toggle-group">
+          <label>Enabled</label>
+          <label class="op-toggle">
+            <input type="checkbox" class="op-enabled" ${s.is_enabled ? 'checked' : ''} />
+            <span class="op-toggle-track"><span class="op-toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+      <div class="op-session-actions">
+        <button class="btn-primary op-btn-save" style="width:auto">Save</button>
+        <button class="op-btn-delete btn-icon-danger" title="Delete session">✕</button>
+      </div>
+      <div class="op-session-status"></div>
+      <div class="op-registrations-panel" style="display:none"></div>
+    </div>`;
+}
+
+function attachRowListeners(container) {
+  container.querySelectorAll('.op-session-row').forEach(row => {
+    row.querySelector('.op-enabled').addEventListener('change', () => autoSaveEnabled(row));
+    row.querySelector('.op-btn-save').addEventListener('click', () => saveSessionRow(row));
+    row.querySelector('.op-btn-delete').addEventListener('click', () => deleteSessionRow(row));
+
+    row.querySelector('.op-session-fields').addEventListener('click', e => {
+      if (e.target.tagName === 'INPUT') return;
+      if (!row.dataset.id) return;
+      toggleRegistrationsPanel(row);
+    });
+  });
+}
+
+async function saveSessionRow(row) {
+  const id = row.dataset.id || null;
+  const is_enabled = row.querySelector('.op-enabled').checked;
+  const date = row.querySelector('.op-date').value || null;
+  const start_time = row.querySelector('.op-start').value || null;
+  const end_time = row.querySelector('.op-end').value || null;
+  const price_per_player = parseInt(row.querySelector('.op-price').value) || 0;
+  const max_players = parseInt(row.querySelector('.op-max').value) || 0;
+  const btn = row.querySelector('.op-btn-save');
+  const statusEl = row.querySelector('.op-session-status');
 
   if (is_enabled) {
-    if (!date) { showToast('Please set a date for open play.', true); return; }
+    if (!date) { showToast('Please set a date.', true); return; }
     if (!start_time || !end_time) { showToast('Please set start and end time.', true); return; }
     if (max_players < 1) { showToast('Max players must be at least 1.', true); return; }
   }
@@ -1411,46 +1466,84 @@ async function saveOpenPlay(type) {
   btn.textContent = 'Saving…';
 
   try {
-    const result = await upsertOpenPlaySession(currentNightOpenPlayId, {
-      is_enabled, date, start_time, end_time, price_per_player, max_players, session_type: 'night',
+    const result = await upsertOpenPlaySession(id, {
+      is_enabled, date, start_time, end_time, price_per_player, max_players,
+      session_type: 'open',
     });
-    if (!currentNightOpenPlayId && result?.length) {
-      currentNightOpenPlayId = result[0].id;
+    if (!id && result?.length) {
+      row.dataset.id = result[0].id;
+      row.classList.remove('op-session-new');
     }
-    statusEl.textContent = `Last saved ${new Date().toLocaleString()}`;
-    showToast(is_enabled ? 'Open play enabled and saved.' : 'Open play saved (disabled).');
-    if (currentNightOpenPlayId) renderOpenPlayRegistrations(type, currentNightOpenPlayId, max_players);
+    statusEl.textContent = `Saved ${new Date().toLocaleTimeString()}`;
+    showToast(is_enabled ? 'Session enabled and saved.' : 'Session saved (disabled).');
+    if (row.dataset.id) renderRegistrationsPanel(row, max_players);
   } catch (e) {
-    showToast(e.message || 'Failed to save open play.', true);
+    showToast(e.message || 'Failed to save session.', true);
     console.error(e);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Save Open Play';
+    btn.textContent = 'Save';
   }
 }
 
-async function handleDeleteRegistration(type, regId, sessionId, maxPlayers) {
-  if (!confirm('Remove this player from the session?')) return;
+async function autoSaveEnabled(row) {
+  const id = row.dataset.id;
+  if (!id) { showToast('Save the session first before toggling.', true); return; }
+  const checkbox = row.querySelector('.op-enabled');
+  const is_enabled = checkbox.checked;
+  const statusEl = row.querySelector('.op-session-status');
+  statusEl.textContent = 'Saving…';
   try {
-    await deleteOpenPlayRegistration(regId);
-    renderOpenPlayRegistrations(type, sessionId, maxPlayers);
+    await upsertOpenPlaySession(id, { is_enabled });
+    statusEl.textContent = `${is_enabled ? 'Enabled' : 'Disabled'} — ${new Date().toLocaleTimeString()}`;
+    showToast(is_enabled ? 'Session enabled.' : 'Session disabled.');
   } catch (e) {
-    showToast('Failed to remove player.', true);
+    checkbox.checked = !is_enabled;
+    statusEl.textContent = 'Failed to update.';
+    showToast(e.message || 'Failed to update enabled state.', true);
+    console.error(e);
   }
 }
 
-async function renderOpenPlayRegistrations(type, sessionId, maxPlayers) {
-  const container = document.getElementById(`open-play-registrations-${type}`);
-  if (!container) return;
+async function deleteSessionRow(row) {
+  const id = row.dataset.id;
+  if (!id) { row.remove(); return; }
+  if (!confirm('This session will be hidden. Existing registrations are kept.')) return;
+  try {
+    await softDeleteOpenPlaySession(id);
+    row.remove();
+    const container = document.getElementById('open-play-list');
+    if (!container.querySelector('.op-session-row')) {
+      renderOpenPlayTable([]);
+    }
+  } catch (e) {
+    showToast('Failed to delete session.', true);
+  }
+}
 
-  container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading registrations…</div>';
+async function toggleRegistrationsPanel(row) {
+  const panel = row.querySelector('.op-registrations-panel');
+  const isOpen = panel.style.display !== 'none';
+  if (isOpen) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const maxPlayers = parseInt(row.querySelector('.op-max').value) || 0;
+  renderRegistrationsPanel(row, maxPlayers);
+}
+
+async function renderRegistrationsPanel(row, maxPlayers) {
+  const panel = row.querySelector('.op-registrations-panel');
+  if (panel.style.display === 'none') return;
+  const sessionId = row.dataset.id;
+  if (!sessionId) return;
+
+  panel.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading registrations…</div>';
 
   try {
     const regs = await fetchOpenPlayRegistrations(sessionId);
     const spotsLeft = maxPlayers - regs.length;
 
     if (regs.length === 0) {
-      container.innerHTML = `
+      panel.innerHTML = `
         <div class="table-empty">
           <div class="icon">📋</div>
           <p>No registrations yet</p>
@@ -1459,7 +1552,7 @@ async function renderOpenPlayRegistrations(type, sessionId, maxPlayers) {
       return;
     }
 
-    container.innerHTML = `
+    panel.innerHTML = `
       <div class="op-reg-header">
         <span class="op-reg-count">${regs.length} registered</span>
         <span class="op-spots-left ${spotsLeft <= 0 ? 'op-full' : ''}">${spotsLeft <= 0 ? 'Session Full' : `${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left`}</span>
@@ -1473,17 +1566,23 @@ async function renderOpenPlayRegistrations(type, sessionId, maxPlayers) {
               <span class="op-reg-phone">${r.mobile || '—'}</span>
             </div>
             <span class="op-reg-time">${new Date(r.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
-            <button class="op-reg-delete" data-id="${r.id}" data-type="${type}" data-session="${sessionId}" data-max="${maxPlayers}" title="Remove player">✕</button>
+            <button class="op-reg-delete" data-id="${r.id}" title="Remove player">✕</button>
           </div>`).join('')}
       </div>`;
 
-    container.querySelectorAll('.op-reg-delete').forEach(btn => {
-      btn.addEventListener('click', () => {
-        handleDeleteRegistration(btn.dataset.type, btn.dataset.id, btn.dataset.session, parseInt(btn.dataset.max));
+    panel.querySelectorAll('.op-reg-delete').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Remove this player from the session?')) return;
+        try {
+          await deleteOpenPlayRegistration(btn.dataset.id);
+          renderRegistrationsPanel(row, maxPlayers);
+        } catch (e) {
+          showToast('Failed to remove player.', true);
+        }
       });
     });
   } catch (e) {
-    container.innerHTML = '<div class="table-empty"><div class="icon">⚠️</div><p>Failed to load registrations</p></div>';
+    panel.innerHTML = '<div class="table-empty"><div class="icon">⚠️</div><p>Failed to load registrations</p></div>';
     console.error(e);
   }
 }
@@ -1994,58 +2093,19 @@ function renderApp() {
 
         <!-- ═══ OPEN PLAY TAB ═══ -->
         <div class="tab-content" id="tab-open-play">
-          <div class="section-title">🏃 Open Play</div>
-          <p class="section-desc">Set up a drop-in open play session. Players can sign up from the booking page when this is enabled.</p>
-
-          <div class="open-play-editor">
-            <div class="open-play-toolbar">
-              <label class="announcement-toggle">
-                <input type="checkbox" id="open-play-enabled-night" />
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">Enable Open Play</span>
-              </label>
-              <span class="announcement-status" id="open-play-status-night"></span>
+          <div class="op-tab-header">
+            <div>
+              <div class="section-title">🏃 Open Play</div>
+              <p class="section-desc">Manage drop-in open play schedules. Players can sign up when a session is enabled.</p>
             </div>
-
-            <div class="open-play-fields" id="open-play-fields-night">
-              <div class="open-play-grid">
-                <div class="input-group">
-                  <label for="open-play-date-night">Date</label>
-                  <input type="date" id="open-play-date-night" />
-                </div>
-                <div class="input-group">
-                  <label for="open-play-start-night">Start Time</label>
-                  <input type="time" id="open-play-start-night" />
-                </div>
-                <div class="input-group">
-                  <label for="open-play-end-night">End Time</label>
-                  <input type="time" id="open-play-end-night" />
-                </div>
-                <div class="input-group">
-                  <label for="open-play-price-night">Price per Player</label>
-                  <div class="price-input-wrapper">
-                    <span class="price-prefix">₱</span>
-                    <input type="number" id="open-play-price-night" min="0" placeholder="50" />
-                  </div>
-                </div>
-                <div class="input-group">
-                  <label for="open-play-max-night">Max Players</label>
-                  <input type="number" id="open-play-max-night" min="1" placeholder="20" />
-                </div>
-              </div>
-            </div>
-
-            <div class="open-play-actions">
-              <button class="btn-primary" id="btn-save-open-play-night" style="width:auto">Save Open Play</button>
-            </div>
+            <button class="btn-add-schedule" id="btn-add-open-play"><span class="btn-add-schedule-icon">＋</span> Add Schedule</button>
           </div>
 
-          <div class="section-title" style="margin-top:2rem">Registrations</div>
-          <div id="open-play-registrations-night">
+          <div id="open-play-list">
             <div class="table-empty">
               <div class="icon">📋</div>
-              <p>No registrations yet</p>
-              <div class="sub">Save a session first to see sign-ups here</div>
+              <p>No schedules yet</p>
+              <div class="sub">Click "+ Add Schedule" to create one</div>
             </div>
           </div>
 
@@ -2302,11 +2362,15 @@ function renderApp() {
   });
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
   // Open Play
-  document.getElementById('open-play-enabled-night').addEventListener('change', () => {
-    updateOpenPlayFieldsState('night');
-    saveOpenPlay('night');
+  document.getElementById('btn-add-open-play').addEventListener('click', () => {
+    const container = document.getElementById('open-play-list');
+    const emptyState = container.querySelector('.table-empty');
+    if (emptyState) container.innerHTML = '';
+    const rowHtml = renderSessionRow({});
+    container.insertAdjacentHTML('afterbegin', rowHtml);
+    attachRowListeners(container);
+    container.querySelector('.op-session-row .op-date')?.focus();
   });
-  document.getElementById('btn-save-open-play-night').addEventListener('click', () => saveOpenPlay('night'));
 
   // Location type toggles
   ['edit-location-toggle', 'add-location-toggle'].forEach(id => {
