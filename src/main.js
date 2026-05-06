@@ -1505,6 +1505,29 @@ async function autoSaveEnabled(row) {
   }
 }
 
+function confirmRemovePlayer(playerName, onConfirm) {
+  const modal = document.getElementById('op-remove-player-modal');
+  const nameEl = document.getElementById('op-remove-player-name');
+  nameEl.textContent = `Remove "${playerName}" from this session? This cannot be undone.`;
+  modal.classList.add('show');
+
+  const confirmBtn = document.getElementById('op-remove-player-confirm');
+  const cancelBtn = document.getElementById('op-remove-player-cancel');
+
+  function close() {
+    modal.classList.remove('show');
+    confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+  }
+
+  document.getElementById('op-remove-player-confirm').addEventListener('click', () => {
+    close();
+    onConfirm();
+  });
+  document.getElementById('op-remove-player-cancel').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); }, { once: true });
+}
+
 async function deleteSessionRow(row) {
   const id = row.dataset.id;
   if (!id) { row.remove(); return; }
@@ -1571,14 +1594,16 @@ async function renderRegistrationsPanel(row, maxPlayers) {
       </div>`;
 
     panel.querySelectorAll('.op-reg-delete').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Remove this player from the session?')) return;
-        try {
-          await deleteOpenPlayRegistration(btn.dataset.id);
-          renderRegistrationsPanel(row, maxPlayers);
-        } catch (e) {
-          showToast('Failed to remove player.', true);
-        }
+      btn.addEventListener('click', () => {
+        const playerName = btn.closest('.op-reg-item').querySelector('.op-reg-name').textContent;
+        confirmRemovePlayer(playerName, async () => {
+          try {
+            await deleteOpenPlayRegistration(btn.dataset.id);
+            renderRegistrationsPanel(row, maxPlayers);
+          } catch (e) {
+            showToast('Failed to remove player.', true);
+          }
+        });
       });
     });
   } catch (e) {
@@ -2146,6 +2171,19 @@ function renderApp() {
         <div class="modal-actions">
           <button class="btn-cancel-modal" id="modal-cancel">Keep Booking</button>
           <button class="btn-confirm-delete" id="modal-confirm">Yes, Cancel It</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Remove Open Play Player Modal -->
+    <div class="modal-overlay" id="op-remove-player-modal">
+      <div class="modal-card">
+        <div class="modal-icon">👤</div>
+        <h2>Remove Player?</h2>
+        <p id="op-remove-player-name">This will remove the player from the session.</p>
+        <div class="modal-actions">
+          <button class="btn-cancel-modal" id="op-remove-player-cancel">Keep Player</button>
+          <button class="btn-confirm-delete" id="op-remove-player-confirm">Yes, Remove</button>
         </div>
       </div>
     </div>
