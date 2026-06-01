@@ -2749,6 +2749,9 @@ function renderApp() {
   });
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
   // Open Play
+  document.getElementById('btn-select-sessions').addEventListener('click', () => {
+    if (opSelectMode) exitSelectMode(); else enterSelectMode();
+  });
   document.getElementById('btn-add-open-play').addEventListener('click', openAddScheduleModal);
   document.getElementById('op-add-modal-close').addEventListener('click', closeAddScheduleModal);
   document.getElementById('op-add-modal-cancel').addEventListener('click', closeAddScheduleModal);
