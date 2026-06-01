@@ -12,6 +12,8 @@ let opModalSelectedDates = new Set();
 let opModalCurrentMonth = new Date();
 let opModalLastClicked = null;
 let opModalDragStart = null;
+let opSelectMode = false;
+let opSelectedIds = new Set();
 
 // ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
 
@@ -235,6 +237,79 @@ async function deleteExpiredCourtLocks() {
   return sbFetch(`court_locks?date=lt.${today}`, {
     method: 'DELETE',
     headers: { 'Prefer': 'return=minimal' },
+  });
+}
+
+// ─── OPEN PLAY SELECT MODE ───────────────────────────────────────────────────
+
+function enterSelectMode() {
+  opSelectMode = true;
+  opSelectedIds = new Set();
+  document.getElementById('open-play-list').classList.add('op-select-active');
+  document.getElementById('btn-add-open-play').style.display = 'none';
+  document.getElementById('btn-select-sessions').classList.add('active');
+  renderSelectToolbar();
+}
+
+function exitSelectMode() {
+  opSelectMode = false;
+  opSelectedIds = new Set();
+  document.getElementById('open-play-list').classList.remove('op-select-active');
+  document.getElementById('btn-add-open-play').style.display = '';
+  document.getElementById('btn-select-sessions').classList.remove('active');
+  document.getElementById('op-select-toolbar').innerHTML = '';
+  document.querySelectorAll('.op-select-checkbox-wrap input').forEach(cb => { cb.checked = false; });
+  document.querySelectorAll('.op-session-row').forEach(r => r.classList.remove('op-row-selected'));
+}
+
+function renderSelectToolbar() {
+  const count = opSelectedIds.size;
+  const toolbar = document.getElementById('op-select-toolbar');
+  toolbar.innerHTML = `
+    <input type="checkbox" id="op-select-all" title="Select all" style="width:1.1rem;height:1.1rem;cursor:pointer;accent-color:var(--primary)" />
+    <span class="op-select-toolbar-label">${count} selected</span>
+    <button class="btn-bulk-delete" id="btn-bulk-delete" ${count === 0 ? 'disabled' : ''}>
+      Delete Selected (${count})
+    </button>
+    <button class="btn-cancel-select" id="btn-cancel-select">Cancel</button>
+  `;
+
+  document.getElementById('btn-cancel-select').addEventListener('click', exitSelectMode);
+  document.getElementById('btn-bulk-delete').addEventListener('click', bulkDeleteSelected);
+
+  const selectAllCb = document.getElementById('op-select-all');
+  selectAllCb.addEventListener('change', () => {
+    const rows = document.querySelectorAll('.op-session-row[data-id]');
+    rows.forEach(row => {
+      const id = row.dataset.id;
+      if (!id) return;
+      const cb = row.querySelector('.op-select-checkbox-wrap input');
+      if (selectAllCb.checked) {
+        cb.checked = true;
+        opSelectedIds.add(id);
+        row.classList.add('op-row-selected');
+      } else {
+        cb.checked = false;
+        opSelectedIds.delete(id);
+        row.classList.remove('op-row-selected');
+      }
+    });
+    renderSelectToolbar();
+  });
+}
+
+function bulkDeleteSelected() {
+  if (opSelectedIds.size === 0) return;
+  const ids = [...opSelectedIds];
+  confirmDeleteSession(async () => {
+    try {
+      await Promise.all(ids.map(id => softDeleteOpenPlaySession(id)));
+      exitSelectMode();
+      await loadOpenPlay();
+      showToast(`${ids.length} session(s) deleted.`);
+    } catch (e) {
+      showToast('Failed to delete sessions.', true);
+    }
   });
 }
 
