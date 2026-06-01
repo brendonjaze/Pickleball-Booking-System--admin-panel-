@@ -1641,6 +1641,9 @@ function renderSessionRow(s = {}) {
   const isNew = !id;
   return `
     <div class="op-session-row${isNew ? ' op-session-new' : ''}" data-id="${id}">
+      <div class="op-select-checkbox-wrap">
+        <input type="checkbox" />
+      </div>
       <div class="op-session-fields">
         <div class="input-group">
           <label>Date</label>
@@ -1684,6 +1687,20 @@ function attachRowListeners(container) {
     row.querySelector('.op-enabled').addEventListener('change', () => autoSaveEnabled(row));
     row.querySelector('.op-btn-save').addEventListener('click', () => saveSessionRow(row));
     row.querySelector('.op-btn-delete').addEventListener('click', () => deleteSessionRow(row));
+
+    const cb = row.querySelector('.op-select-checkbox-wrap input');
+    cb.addEventListener('change', () => {
+      const id = row.dataset.id;
+      if (!id) return;
+      if (cb.checked) {
+        opSelectedIds.add(id);
+        row.classList.add('op-row-selected');
+      } else {
+        opSelectedIds.delete(id);
+        row.classList.remove('op-row-selected');
+      }
+      renderSelectToolbar();
+    });
 
     row.querySelector('.op-session-fields').addEventListener('click', e => {
       if (e.target.tagName === 'INPUT') return;
