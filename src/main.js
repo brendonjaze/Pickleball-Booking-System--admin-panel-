@@ -248,8 +248,8 @@ function openAddScheduleModal() {
   document.getElementById('op-modal-start').value = '';
   document.getElementById('op-modal-end').value = '';
   document.getElementById('op-modal-price').value = '';
-  document.getElementById('op-modal-max').value = '';
-  document.getElementById('op-modal-enabled').checked = false;
+  document.getElementById('op-modal-max').value = '20';
+  document.getElementById('op-modal-enabled').checked = true;
   renderOpModalCalendar();
   updateOpModalSaveBtn();
   document.getElementById('op-add-modal').classList.add('show');
@@ -373,6 +373,7 @@ async function saveAddScheduleModal() {
 
   if (!start_time || !end_time) { showToast('Please set start and end time.', true); return; }
   if (opModalSelectedDates.size === 0) { showToast('Please select at least one date.', true); return; }
+  if (max_players < 1) { showToast('Max players must be at least 1.', true); return; }
 
   const btn = document.getElementById('op-modal-save');
   btn.disabled = true;
@@ -1703,17 +1704,39 @@ function confirmRemovePlayer(playerName, onConfirm) {
 async function deleteSessionRow(row) {
   const id = row.dataset.id;
   if (!id) { row.remove(); return; }
-  if (!confirm('This session will be hidden. Existing registrations are kept.')) return;
-  try {
-    await softDeleteOpenPlaySession(id);
-    row.remove();
-    const container = document.getElementById('open-play-list');
-    if (!container.querySelector('.op-session-row')) {
-      renderOpenPlayTable([]);
+  confirmDeleteSession(async () => {
+    try {
+      await softDeleteOpenPlaySession(id);
+      row.remove();
+      const container = document.getElementById('open-play-list');
+      if (!container.querySelector('.op-session-row')) {
+        renderOpenPlayTable([]);
+      }
+    } catch (e) {
+      showToast('Failed to delete session.', true);
     }
-  } catch (e) {
-    showToast('Failed to delete session.', true);
+  });
+}
+
+function confirmDeleteSession(onConfirm) {
+  const modal = document.getElementById('op-delete-session-modal');
+  modal.classList.add('show');
+
+  const confirmBtn = document.getElementById('op-delete-session-confirm');
+  const cancelBtn = document.getElementById('op-delete-session-cancel');
+
+  function close() {
+    modal.classList.remove('show');
+    confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
   }
+
+  document.getElementById('op-delete-session-confirm').addEventListener('click', () => {
+    close();
+    onConfirm();
+  });
+  document.getElementById('op-delete-session-cancel').addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); }, { once: true });
 }
 
 async function toggleRegistrationsPanel(row) {
@@ -2356,6 +2379,19 @@ function renderApp() {
         <div class="modal-actions">
           <button class="btn-cancel-modal" id="op-remove-player-cancel">Keep Player</button>
           <button class="btn-confirm-delete" id="op-remove-player-confirm">Yes, Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Open Play Session Modal -->
+    <div class="modal-overlay" id="op-delete-session-modal">
+      <div class="modal-card">
+        <div class="modal-icon">🗑️</div>
+        <h2>Delete Session?</h2>
+        <p>This session will be hidden. Existing registrations are kept.</p>
+        <div class="modal-actions">
+          <button class="btn-cancel-modal" id="op-delete-session-cancel">Keep Session</button>
+          <button class="btn-confirm-delete" id="op-delete-session-confirm">Yes, Delete</button>
         </div>
       </div>
     </div>
