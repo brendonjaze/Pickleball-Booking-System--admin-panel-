@@ -277,7 +277,18 @@ function renderSelectToolbar() {
   document.getElementById('btn-cancel-select').addEventListener('click', exitSelectMode);
   document.getElementById('btn-bulk-delete').addEventListener('click', bulkDeleteSelected);
 
+  const totalRows = document.querySelectorAll('.op-session-row[data-id]').length;
   const selectAllCb = document.getElementById('op-select-all');
+  if (count > 0 && count >= totalRows) {
+    selectAllCb.checked = true;
+    selectAllCb.indeterminate = false;
+  } else if (count > 0) {
+    selectAllCb.checked = false;
+    selectAllCb.indeterminate = true;
+  } else {
+    selectAllCb.checked = false;
+    selectAllCb.indeterminate = false;
+  }
   selectAllCb.addEventListener('change', () => {
     const rows = document.querySelectorAll('.op-session-row[data-id]');
     rows.forEach(row => {
@@ -1705,6 +1716,12 @@ function attachRowListeners(container) {
     row.querySelector('.op-session-fields').addEventListener('click', e => {
       if (e.target.tagName === 'INPUT') return;
       if (!row.dataset.id) return;
+      if (opSelectMode) {
+        const cb = row.querySelector('.op-select-checkbox-wrap input');
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+        return;
+      }
       toggleRegistrationsPanel(row);
     });
   });
