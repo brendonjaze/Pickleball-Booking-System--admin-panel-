@@ -1776,6 +1776,131 @@ tbody td {
   font-weight: 600;
 }
 
+/* ─── ADD SCHEDULE MODAL ───────────────────────────────── */
+
+.op-add-modal-card {
+  max-width: 520px;
+  width: 100%;
+  text-align: left;
+  padding: 1.5rem;
+}
+
+.op-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.op-cal-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.op-cal-nav {
+  background: var(--bg);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all var(--transition);
+}
+
+.op-cal-nav:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.op-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-bottom: 0.5rem;
+}
+
+.op-cal-day-label {
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 0.2rem 0;
+  text-transform: uppercase;
+}
+
+.op-cal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  border-radius: 4px;
+  cursor: default;
+  user-select: none;
+}
+
+.op-cal-day {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-primary);
+  transition: background var(--transition), color var(--transition);
+}
+
+.op-cal-day:hover {
+  background: var(--accent);
+  color: var(--primary);
+}
+
+.op-cal-day.selected {
+  background: var(--primary);
+  color: var(--white);
+}
+
+.op-cal-empty {
+  pointer-events: none;
+}
+
+.op-cal-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.op-modal-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.op-modal-enabled-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 480px) {
+  .op-add-modal-card {
+    padding: 1rem;
+  }
+
+  .op-modal-settings {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+}
+
 /* ─── RESPONSIVE ───────────────────────────────────────── */
 
 /* ── 1024px: Small laptop / large tablet landscape ─────── */
