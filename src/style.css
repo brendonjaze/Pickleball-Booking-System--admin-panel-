@@ -2732,6 +2732,125 @@ tbody td {
   line-height: 1;
 }
 
+.op-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.btn-select-sessions {
+  padding: 0.6rem 1.1rem;
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-select-sessions:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn-select-sessions.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--white);
+}
+
+/* Select toolbar */
+.op-select-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  background: var(--accent);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.op-select-toolbar-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.btn-bulk-delete {
+  padding: 0.5rem 1rem;
+  background: var(--danger, #e53e3e);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius-xs);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--transition);
+}
+
+.btn-bulk-delete:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-bulk-delete:not(:disabled):hover {
+  filter: brightness(1.1);
+}
+
+.btn-cancel-select {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xs);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-cancel-select:hover {
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+/* Row checkbox — hidden until select mode active */
+.op-select-checkbox-wrap {
+  display: none;
+  align-items: center;
+  padding-right: 0.75rem;
+}
+
+.op-select-active .op-select-checkbox-wrap {
+  display: flex;
+}
+
+.op-select-checkbox-wrap input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.op-session-row.op-row-selected {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--white));
+}
+
+/* Hide individual delete button in select mode */
+.op-select-active .op-btn-delete {
+  display: none;
+}
+
 .op-session-row {
   background: var(--white);
   border: 1px solid var(--border-light);
