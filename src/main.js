@@ -225,6 +225,14 @@ async function deleteCourtLockGroup(groupId) {
   });
 }
 
+async function deleteExpiredCourtLocks() {
+  const today = todayStr();
+  return sbFetch(`court_locks?date=lt.${today}`, {
+    method: 'DELETE',
+    headers: { 'Prefer': 'return=minimal' },
+  });
+}
+
 // ─── OPEN PLAY API ───────────────────────────────────────────────────────────
 
 async function fetchAllOpenPlaySessions() {
@@ -1248,6 +1256,7 @@ async function loadCourtLocks() {
   container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading locks…</div>';
 
   try {
+    await deleteExpiredCourtLocks();
     allCourtLocks = await fetchCourtLocks();
     renderCourtLocks();
   } catch (e) {
@@ -2184,6 +2193,50 @@ function renderApp() {
         <div class="modal-actions">
           <button class="btn-cancel-modal" id="op-remove-player-cancel">Keep Player</button>
           <button class="btn-confirm-delete" id="op-remove-player-confirm">Yes, Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Open Play Schedule Modal -->
+    <div class="modal-overlay" id="op-add-modal">
+      <div class="modal-card op-add-modal-card">
+        <div class="account-modal-header">
+          <h2>Add Open Play Schedule</h2>
+          <button class="modal-close" id="op-add-modal-close">&times;</button>
+        </div>
+
+        <div id="op-modal-calendar"></div>
+
+        <div class="op-modal-settings">
+          <div class="input-group">
+            <label>Start Time</label>
+            <input type="time" id="op-modal-start" />
+          </div>
+          <div class="input-group">
+            <label>End Time</label>
+            <input type="time" id="op-modal-end" />
+          </div>
+          <div class="input-group">
+            <label>Price (&#8369;)</label>
+            <input type="number" id="op-modal-price" min="0" placeholder="50" />
+          </div>
+          <div class="input-group">
+            <label>Max Players</label>
+            <input type="number" id="op-modal-max" min="1" placeholder="20" />
+          </div>
+        </div>
+
+        <div class="op-modal-enabled-row">
+          <label>Enabled</label>
+          <label class="op-toggle">
+            <input type="checkbox" id="op-modal-enabled" />
+            <span class="op-toggle-track"><span class="op-toggle-thumb"></span></span>
+          </label>
+        </div>
+
+        <div class="modal-actions" style="margin-top:1rem">
+          <button class="btn-cancel-modal" id="op-add-modal-cancel">Cancel</button>
+          <button class="btn-primary" id="op-modal-save" disabled>Add Session(s)</button>
         </div>
       </div>
     </div>
