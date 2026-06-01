@@ -8,6 +8,11 @@ const SESSION_KEY = 'glan_admin_token';
 
 let allCourts = []; // populated on load from Supabase
 
+let opModalSelectedDates = new Set();
+let opModalCurrentMonth = new Date();
+let opModalLastClicked = null;
+let opModalDragStart = null;
+
 // ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
 
 function getToken() {
@@ -231,6 +236,164 @@ async function deleteExpiredCourtLocks() {
     method: 'DELETE',
     headers: { 'Prefer': 'return=minimal' },
   });
+}
+
+// ─── ADD SCHEDULE MODAL ──────────────────────────────────────────────────────
+
+function openAddScheduleModal() {
+  opModalSelectedDates = new Set();
+  opModalCurrentMonth = new Date();
+  opModalLastClicked = null;
+  opModalDragStart = null;
+  document.getElementById('op-modal-start').value = '';
+  document.getElementById('op-modal-end').value = '';
+  document.getElementById('op-modal-price').value = '';
+  document.getElementById('op-modal-max').value = '';
+  document.getElementById('op-modal-enabled').checked = false;
+  renderOpModalCalendar();
+  updateOpModalSaveBtn();
+  document.getElementById('op-add-modal').classList.add('show');
+}
+
+function closeAddScheduleModal() {
+  document.getElementById('op-add-modal').classList.remove('show');
+}
+
+function renderOpModalCalendar() {
+  const year = opModalCurrentMonth.getFullYear();
+  const month = opModalCurrentMonth.getMonth();
+  const monthName = opModalCurrentMonth.toLocaleString('default', { month: 'long' });
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const count = opModalSelectedDates.size;
+
+  let html = `
+    <div class="op-cal-header">
+      <button class="op-cal-nav" id="op-cal-prev">&#8249;</button>
+      <span class="op-cal-title">${monthName} ${year}</span>
+      <button class="op-cal-nav" id="op-cal-next">&#8250;</button>
+    </div>
+    <div class="op-cal-grid">
+      <div class="op-cal-day-label">Su</div>
+      <div class="op-cal-day-label">Mo</div>
+      <div class="op-cal-day-label">Tu</div>
+      <div class="op-cal-day-label">We</div>
+      <div class="op-cal-day-label">Th</div>
+      <div class="op-cal-day-label">Fr</div>
+      <div class="op-cal-day-label">Sa</div>
+  `;
+
+  for (let i = 0; i < firstDay; i++) {
+    html += `<div class="op-cal-cell op-cal-empty"></div>`;
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const sel = opModalSelectedDates.has(dateStr) ? ' selected' : '';
+    html += `<div class="op-cal-cell op-cal-day${sel}" data-date="${dateStr}">${d}</div>`;
+  }
+
+  html += `</div><div class="op-cal-count">${count} date(s) selected</div>`;
+
+  const calEl = document.getElementById('op-modal-calendar');
+  calEl.innerHTML = html;
+
+  document.getElementById('op-cal-prev').addEventListener('click', () => {
+    opModalCurrentMonth = new Date(year, month - 1, 1);
+    renderOpModalCalendar();
+  });
+  document.getElementById('op-cal-next').addEventListener('click', () => {
+    opModalCurrentMonth = new Date(year, month + 1, 1);
+    renderOpModalCalendar();
+  });
+
+  calEl.querySelectorAll('.op-cal-day').forEach(cell => {
+    cell.addEventListener('click', e => {
+      const date = cell.dataset.date;
+      if (e.shiftKey && opModalLastClicked) {
+        selectOpRange(opModalLastClicked, date);
+      } else {
+        if (opModalSelectedDates.has(date)) {
+          opModalSelectedDates.delete(date);
+        } else {
+          opModalSelectedDates.add(date);
+        }
+        opModalLastClicked = date;
+      }
+      renderOpModalCalendar();
+      updateOpModalSaveBtn();
+    });
+
+    cell.addEventListener('mousedown', () => {
+      opModalDragStart = cell.dataset.date;
+    });
+
+    cell.addEventListener('mouseover', e => {
+      if (opModalDragStart && e.buttons === 1) {
+        selectOpRange(opModalDragStart, cell.dataset.date);
+        renderOpModalCalendar();
+        updateOpModalSaveBtn();
+      }
+    });
+
+    cell.addEventListener('mouseup', () => {
+      opModalDragStart = null;
+    });
+  });
+}
+
+function selectOpRange(startDate, endDate) {
+  const start = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  const [from, to] = start <= end ? [start, end] : [end, start];
+  const cur = new Date(from);
+  while (cur <= to) {
+    const str = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+    opModalSelectedDates.add(str);
+    cur.setDate(cur.getDate() + 1);
+  }
+  opModalLastClicked = endDate;
+}
+
+function updateOpModalSaveBtn() {
+  const btn = document.getElementById('op-modal-save');
+  const count = opModalSelectedDates.size;
+  const start = document.getElementById('op-modal-start').value;
+  const end = document.getElementById('op-modal-end').value;
+  btn.disabled = count === 0 || !start || !end;
+  btn.textContent = count > 0 ? `Add ${count} Session(s)` : 'Add Session(s)';
+}
+
+async function saveAddScheduleModal() {
+  const start_time = document.getElementById('op-modal-start').value;
+  const end_time = document.getElementById('op-modal-end').value;
+  const price_per_player = parseInt(document.getElementById('op-modal-price').value) || 0;
+  const max_players = parseInt(document.getElementById('op-modal-max').value) || 0;
+  const is_enabled = document.getElementById('op-modal-enabled').checked;
+
+  if (!start_time || !end_time) { showToast('Please set start and end time.', true); return; }
+  if (opModalSelectedDates.size === 0) { showToast('Please select at least one date.', true); return; }
+
+  const btn = document.getElementById('op-modal-save');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const selectedCount = opModalSelectedDates.size;
+  try {
+    await Promise.all([...opModalSelectedDates].map(date =>
+      upsertOpenPlaySession(null, {
+        is_enabled, date, start_time, end_time, price_per_player, max_players,
+        session_type: 'open',
+      })
+    ));
+    closeAddScheduleModal();
+    await loadOpenPlay();
+    showToast(`${selectedCount} session(s) added.`);
+  } catch (e) {
+    showToast(e.message || 'Failed to save sessions.', true);
+    btn.disabled = false;
+    updateOpModalSaveBtn();
+  }
 }
 
 // ─── OPEN PLAY API ───────────────────────────────────────────────────────────
@@ -2453,14 +2616,15 @@ function renderApp() {
   });
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
   // Open Play
-  document.getElementById('btn-add-open-play').addEventListener('click', () => {
-    const container = document.getElementById('open-play-list');
-    const emptyState = container.querySelector('.table-empty');
-    if (emptyState) container.innerHTML = '';
-    const rowHtml = renderSessionRow({});
-    container.insertAdjacentHTML('afterbegin', rowHtml);
-    attachRowListeners(container);
-    container.querySelector('.op-session-row .op-date')?.focus();
+  document.getElementById('btn-add-open-play').addEventListener('click', openAddScheduleModal);
+  document.getElementById('op-add-modal-close').addEventListener('click', closeAddScheduleModal);
+  document.getElementById('op-add-modal-cancel').addEventListener('click', closeAddScheduleModal);
+  document.getElementById('op-add-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('op-add-modal')) closeAddScheduleModal();
+  });
+  document.getElementById('op-modal-save').addEventListener('click', saveAddScheduleModal);
+  ['op-modal-start', 'op-modal-end'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateOpModalSaveBtn);
   });
 
   // Location type toggles
