@@ -2,8 +2,8 @@ import './style.css';
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = 'https://qzjaegutlsgtlaworbuy.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_Hy_hFyt_cdZkGV74qjbHlQ_L_gA18rb';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const SESSION_KEY = 'glan_admin_token';
 
 let allCourts = []; // populated on load from Supabase
