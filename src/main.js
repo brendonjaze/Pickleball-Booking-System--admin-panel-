@@ -2318,8 +2318,13 @@ function renderApp() {
               <div class="section-title">🏃 Open Play</div>
               <p class="section-desc">Manage drop-in open play schedules. Players can sign up when a session is enabled.</p>
             </div>
-            <button class="btn-add-schedule" id="btn-add-open-play"><span class="btn-add-schedule-icon">＋</span> Add Schedule</button>
+            <div class="op-header-actions">
+              <button class="btn-select-sessions" id="btn-select-sessions">Select</button>
+              <button class="btn-add-schedule" id="btn-add-open-play"><span class="btn-add-schedule-icon">＋</span> Add Schedule</button>
+            </div>
           </div>
+
+          <div id="op-select-toolbar"></div>
 
           <div id="open-play-list">
             <div class="table-empty">
