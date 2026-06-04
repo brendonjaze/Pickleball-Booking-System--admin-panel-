@@ -202,6 +202,13 @@ html, body {
   color: #b0b8c4;
 }
 
+.time-midnight-hint {
+  display: block;
+  font-size: 0.68rem;
+  color: #8a95a3;
+  margin-top: 0.25rem;
+}
+
 .password-wrapper {
   position: relative;
   display: flex;
@@ -1637,35 +1644,90 @@ tbody td {
 
 /* Time Grid */
 .lock-time-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   user-select: none;
 }
 
+.lock-time-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lock-time-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.1rem;
+}
+
+.lock-time-group-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.lock-time-group-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.lock-time-chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
 .lock-time-slot {
-  padding: 0.5rem 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.55rem 0.6rem;
   font-size: 0.72rem;
   font-weight: 600;
   text-align: center;
-  border-radius: var(--radius-xs);
+  border-radius: 999px;
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: all 0.15s ease;
   background: var(--white);
-  border: 1px solid var(--border-light);
+  border: 1.5px solid var(--border-light);
   color: var(--text-secondary);
+}
+
+.lock-time-check {
+  font-size: 0.7rem;
+  font-weight: 800;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.lock-time-label {
+  line-height: 1;
 }
 
 .lock-time-slot:hover {
   border-color: var(--primary);
   color: var(--primary);
-  background: rgba(14, 116, 144, 0.04);
+  background: var(--primary-ghost);
 }
 
 .lock-time-slot.selected {
-  background: var(--primary);
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary-light));
   color: var(--white);
-  border-color: var(--primary);
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(14, 116, 144, 0.3);
+}
+
+.lock-time-slot.selected .lock-time-check {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .lock-selected-info {
@@ -1783,6 +1845,8 @@ tbody td {
   width: 100%;
   text-align: left;
   padding: 1.5rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
 }
 
 .op-cal-header {
@@ -1879,6 +1943,87 @@ tbody td {
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+/* Open Play time chip picker */
+.op-time-picker-field {
+  grid-column: 1 / -1;
+}
+
+.op-time-picker-field-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+}
+
+.op-time-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.op-time-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.op-time-chips {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.op-time-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--white);
+  border: 1.5px solid var(--border-light);
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.op-time-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-ghost);
+}
+
+.op-time-chip.selected {
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary-light));
+  color: var(--white);
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(14, 116, 144, 0.3);
+}
+
+.op-time-chip .lock-time-check {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  font-size: 0.65rem;
+}
+
+.op-time-chip.selected .lock-time-check {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* In session rows, time pickers span full width */
+.op-session-fields .op-time-picker-field {
+  grid-column: 1 / -1;
 }
 
 .op-modal-enabled-row {
@@ -2211,7 +2356,7 @@ tbody td {
   .lock-cal-weekdays span { font-size: 0.58rem; }
   .lock-cal-month { font-size: 0.82rem; }
   .lock-cal-nav { width: 28px; height: 28px; font-size: 1rem; }
-  .lock-time-grid { grid-template-columns: 1fr 1fr; }
+  .lock-time-chips { grid-template-columns: 1fr 1fr; }
   .lock-time-slot { padding: 0.55rem 0.5rem; font-size: 0.7rem; }
 
   .lock-options {
@@ -2374,7 +2519,7 @@ tbody td {
   .lock-cal-nav { width: 26px; height: 26px; font-size: 0.9rem; }
 
   /* Time grid: 1 col on very small */
-  .lock-time-grid { grid-template-columns: 1fr; }
+  .lock-time-chips { grid-template-columns: 1fr; }
   .lock-time-slot { font-size: 0.7rem; padding: 0.55rem; }
 
   /* Lock cards */

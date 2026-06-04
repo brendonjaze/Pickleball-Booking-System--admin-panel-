@@ -331,8 +331,8 @@ function openAddScheduleModal() {
   opModalCurrentMonth = new Date();
   opModalLastClicked = null;
   opModalDragStart = null;
-  document.getElementById('op-modal-start').value = '';
-  document.getElementById('op-modal-end').value = '';
+  document.getElementById('op-modal-start-picker').innerHTML = opTimeChipsHTML(null, 'start');
+  document.getElementById('op-modal-end-picker').innerHTML = opTimeChipsHTML(null, 'end');
   document.getElementById('op-modal-price').value = '';
   document.getElementById('op-modal-max').value = '20';
   document.getElementById('op-modal-enabled').checked = true;
@@ -444,15 +444,15 @@ function selectOpRange(startDate, endDate) {
 function updateOpModalSaveBtn() {
   const btn = document.getElementById('op-modal-save');
   const count = opModalSelectedDates.size;
-  const start = document.getElementById('op-modal-start').value;
-  const end = document.getElementById('op-modal-end').value;
+  const start = document.querySelector('#op-modal-start-picker .op-time-chip.selected')?.dataset.value;
+  const end = document.querySelector('#op-modal-end-picker .op-time-chip.selected')?.dataset.value;
   btn.disabled = count === 0 || !start || !end;
   btn.textContent = count > 0 ? `Add ${count} Session(s)` : 'Add Session(s)';
 }
 
 async function saveAddScheduleModal() {
-  const start_time = document.getElementById('op-modal-start').value;
-  const end_time = document.getElementById('op-modal-end').value;
+  const start_time = document.querySelector('#op-modal-start-picker .op-time-chip.selected')?.dataset.value;
+  const end_time = document.querySelector('#op-modal-end-picker .op-time-chip.selected')?.dataset.value;
   const price_per_player = parseInt(document.getElementById('op-modal-price').value) || 0;
   const max_players = parseInt(document.getElementById('op-modal-max').value) || 0;
   const is_enabled = document.getElementById('op-modal-enabled').checked;
@@ -1145,8 +1145,51 @@ const LOCK_TIME_SLOTS = [
   '8:00 PM – 9:00 PM',
   '9:00 PM – 10:00 PM',
   '10:00 PM – 11:00 PM',
-  '11:00 PM – 12:00 AM',
+  '11:00 PM – 12:00 AM (Midnight)',
 ];
+
+const LOCK_TIME_GROUPS = [
+  { label: 'Morning', icon: '☀️', slots: ['9:00 AM – 10:00 AM', '10:00 AM – 11:00 AM', '11:00 AM – 12:00 PM'] },
+  { label: 'Afternoon', icon: '⛅', slots: ['12:00 PM – 1:00 PM', '1:00 PM – 2:00 PM', '2:00 PM – 3:00 PM', '3:00 PM – 4:00 PM', '4:00 PM – 5:00 PM'] },
+  { label: 'Evening', icon: '🌙', slots: ['5:00 PM – 6:00 PM', '6:00 PM – 7:00 PM', '7:00 PM – 8:00 PM', '8:00 PM – 9:00 PM', '9:00 PM – 10:00 PM', '10:00 PM – 11:00 PM', '11:00 PM – 12:00 AM (Midnight)'] },
+];
+
+const OP_TIME_GROUPS = [
+  { label: 'Morning', icon: '☀️', slots: [
+    { label: '6:00 AM', value: '06:00' }, { label: '7:00 AM', value: '07:00' },
+    { label: '8:00 AM', value: '08:00' }, { label: '9:00 AM', value: '09:00' },
+    { label: '10:00 AM', value: '10:00' }, { label: '11:00 AM', value: '11:00' },
+  ]},
+  { label: 'Afternoon', icon: '⛅', slots: [
+    { label: '12:00 PM', value: '12:00' }, { label: '1:00 PM', value: '13:00' },
+    { label: '2:00 PM', value: '14:00' }, { label: '3:00 PM', value: '15:00' },
+    { label: '4:00 PM', value: '16:00' }, { label: '5:00 PM', value: '17:00' },
+  ]},
+  { label: 'Evening', icon: '🌙', slots: [
+    { label: '6:00 PM', value: '18:00' }, { label: '7:00 PM', value: '19:00' },
+    { label: '8:00 PM', value: '20:00' }, { label: '9:00 PM', value: '21:00' },
+    { label: '10:00 PM', value: '22:00' }, { label: '11:00 PM', value: '23:00' },
+    { label: 'Midnight', value: '00:00' },
+  ]},
+];
+
+function opTimeChipsHTML(selectedValue, role) {
+  return `<div class="op-time-picker" data-role="${role}">${
+    OP_TIME_GROUPS.map(group =>
+      `<div class="op-time-group">
+        <div class="lock-time-group-header">
+          <span class="lock-time-group-icon">${group.icon}</span>
+          <span class="lock-time-group-label">${group.label}</span>
+        </div>
+        <div class="op-time-chips">
+          ${group.slots.map(slot =>
+            `<div class="op-time-chip${selectedValue === slot.value ? ' selected' : ''}" data-value="${slot.value}"><span class="lock-time-check">✓</span><span>${slot.label}</span></div>`
+          ).join('')}
+        </div>
+      </div>`
+    ).join('')
+  }</div>`;
+}
 
 function renderLockCalendar() {
   const container = document.getElementById('lock-cal-days');
@@ -1242,9 +1285,22 @@ function renderLockTimeGrid() {
   const container = document.getElementById('lock-time-grid');
   if (!container) return;
 
-  container.innerHTML = LOCK_TIME_SLOTS.map(slot =>
-    `<div class="lock-time-slot" data-slot="${slot}">${slot}</div>`
-  ).join('');
+  container.innerHTML = LOCK_TIME_GROUPS.map(group => `
+    <div class="lock-time-group">
+      <div class="lock-time-group-header">
+        <span class="lock-time-group-icon">${group.icon}</span>
+        <span class="lock-time-group-label">${group.label}</span>
+      </div>
+      <div class="lock-time-chips">
+        ${group.slots.map(slot => `
+          <div class="lock-time-slot${selectedLockTimes.has(slot) ? ' selected' : ''}" data-slot="${slot}">
+            <span class="lock-time-check">✓</span>
+            <span class="lock-time-label">${slot}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
 
   updateLockTimesInfo();
   attachTimeDragEvents();
@@ -1660,13 +1716,13 @@ function renderSessionRow(s = {}) {
           <label>Date</label>
           <input type="date" class="op-date" value="${s.date || ''}" />
         </div>
-        <div class="input-group">
-          <label>Start</label>
-          <input type="time" class="op-start" value="${s.start_time || ''}" />
+        <div class="op-time-picker-field">
+          <div class="op-time-picker-field-label">Start</div>
+          ${opTimeChipsHTML(s.start_time || null, 'start')}
         </div>
-        <div class="input-group">
-          <label>End</label>
-          <input type="time" class="op-end" value="${s.end_time || ''}" />
+        <div class="op-time-picker-field">
+          <div class="op-time-picker-field-label">End</div>
+          ${opTimeChipsHTML(s.end_time || null, 'end')}
         </div>
         <div class="input-group">
           <label>Price (₱)</label>
@@ -1714,6 +1770,13 @@ function attachRowListeners(container) {
     });
 
     row.querySelector('.op-session-fields').addEventListener('click', e => {
+      const chip = e.target.closest('.op-time-chip');
+      if (chip) {
+        const picker = chip.closest('.op-time-picker');
+        picker.querySelectorAll('.op-time-chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+        return;
+      }
       if (e.target.tagName === 'INPUT') return;
       if (!row.dataset.id) return;
       if (opSelectMode) {
@@ -1731,8 +1794,8 @@ async function saveSessionRow(row) {
   const id = row.dataset.id || null;
   const is_enabled = row.querySelector('.op-enabled').checked;
   const date = row.querySelector('.op-date').value || null;
-  const start_time = row.querySelector('.op-start').value || null;
-  const end_time = row.querySelector('.op-end').value || null;
+  const start_time = row.querySelector('.op-time-picker[data-role="start"] .op-time-chip.selected')?.dataset.value || null;
+  const end_time = row.querySelector('.op-time-picker[data-role="end"] .op-time-chip.selected')?.dataset.value || null;
   const price_per_player = parseInt(row.querySelector('.op-price').value) || 0;
   const max_players = parseInt(row.querySelector('.op-max').value) || 0;
   const btn = row.querySelector('.op-btn-save');
@@ -2521,13 +2584,13 @@ function renderApp() {
         <div id="op-modal-calendar"></div>
 
         <div class="op-modal-settings">
-          <div class="input-group">
-            <label>Start Time</label>
-            <input type="time" id="op-modal-start" />
+          <div class="op-time-picker-field">
+            <div class="op-time-picker-field-label">Start Time</div>
+            <div id="op-modal-start-picker"></div>
           </div>
-          <div class="input-group">
-            <label>End Time</label>
-            <input type="time" id="op-modal-end" />
+          <div class="op-time-picker-field">
+            <div class="op-time-picker-field-label">End Time</div>
+            <div id="op-modal-end-picker"></div>
           </div>
           <div class="input-group">
             <label>Price (&#8369;)</label>
@@ -2776,8 +2839,14 @@ function renderApp() {
     if (e.target === document.getElementById('op-add-modal')) closeAddScheduleModal();
   });
   document.getElementById('op-modal-save').addEventListener('click', saveAddScheduleModal);
-  ['op-modal-start', 'op-modal-end'].forEach(id => {
-    document.getElementById(id).addEventListener('change', updateOpModalSaveBtn);
+  document.getElementById('op-add-modal').addEventListener('click', e => {
+    const chip = e.target.closest('.op-time-chip');
+    if (!chip) return;
+    const picker = chip.closest('.op-time-picker');
+    if (!picker) return;
+    picker.querySelectorAll('.op-time-chip').forEach(c => c.classList.remove('selected'));
+    chip.classList.add('selected');
+    updateOpModalSaveBtn();
   });
 
   // Location type toggles
