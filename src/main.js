@@ -1068,7 +1068,7 @@ async function loadAnnouncement() {
     if (ann) {
       currentAnnouncementId = ann.id;
       document.getElementById('announcement-title').value = ann.title || '';
-      document.getElementById('announcement-content').value = ann.content || '';
+      document.getElementById('announcement-content').innerHTML = ann.content || '';
       document.getElementById('announcement-visible').checked = ann.is_visible ?? false;
       statusEl.textContent = ann.updated_at
         ? `Last saved ${new Date(ann.updated_at).toLocaleString()}`
@@ -1086,20 +1086,21 @@ async function loadAnnouncement() {
 
 function updateAnnouncementPreview() {
   const title = document.getElementById('announcement-title').value.trim();
-  const content = document.getElementById('announcement-content').value.trim();
+  const contentEl = document.getElementById('announcement-content');
+  const content = contentEl.innerHTML.trim();
   const preview = document.getElementById('announcement-preview');
-  if (!title && !content) {
+  if (!title && (!content || content === '<br>')) {
     preview.style.display = 'none';
     return;
   }
   preview.style.display = 'block';
   document.getElementById('announcement-preview-title').textContent = title;
-  document.getElementById('announcement-preview-content').textContent = content;
+  document.getElementById('announcement-preview-content').innerHTML = content;
 }
 
 async function saveAnnouncement() {
   const title = document.getElementById('announcement-title').value.trim();
-  const content = document.getElementById('announcement-content').value.trim();
+  const content = document.getElementById('announcement-content').innerHTML.trim();
   const is_visible = document.getElementById('announcement-visible').checked;
   const btn = document.getElementById('btn-save-announcement');
   const statusEl = document.getElementById('announcement-status');
@@ -1716,13 +1717,13 @@ function renderSessionRow(s = {}) {
           <label>Date</label>
           <input type="date" class="op-date" value="${s.date || ''}" />
         </div>
-        <div class="op-time-picker-field">
-          <div class="op-time-picker-field-label">Start</div>
-          ${opTimeChipsHTML(s.start_time || null, 'start')}
+        <div class="input-group">
+          <label>Start</label>
+          <input type="time" class="op-start" value="${s.start_time || ''}" />
         </div>
-        <div class="op-time-picker-field">
-          <div class="op-time-picker-field-label">End</div>
-          ${opTimeChipsHTML(s.end_time || null, 'end')}
+        <div class="input-group">
+          <label>End</label>
+          <input type="time" class="op-end" value="${s.end_time || ''}" />
         </div>
         <div class="input-group">
           <label>Price (₱)</label>
@@ -1770,13 +1771,6 @@ function attachRowListeners(container) {
     });
 
     row.querySelector('.op-session-fields').addEventListener('click', e => {
-      const chip = e.target.closest('.op-time-chip');
-      if (chip) {
-        const picker = chip.closest('.op-time-picker');
-        picker.querySelectorAll('.op-time-chip').forEach(c => c.classList.remove('selected'));
-        chip.classList.add('selected');
-        return;
-      }
       if (e.target.tagName === 'INPUT') return;
       if (!row.dataset.id) return;
       if (opSelectMode) {
@@ -1794,8 +1788,8 @@ async function saveSessionRow(row) {
   const id = row.dataset.id || null;
   const is_enabled = row.querySelector('.op-enabled').checked;
   const date = row.querySelector('.op-date').value || null;
-  const start_time = row.querySelector('.op-time-picker[data-role="start"] .op-time-chip.selected')?.dataset.value || null;
-  const end_time = row.querySelector('.op-time-picker[data-role="end"] .op-time-chip.selected')?.dataset.value || null;
+  const start_time = row.querySelector('.op-start').value || null;
+  const end_time = row.querySelector('.op-end').value || null;
   const price_per_player = parseInt(row.querySelector('.op-price').value) || 0;
   const max_players = parseInt(row.querySelector('.op-max').value) || 0;
   const btn = row.querySelector('.op-btn-save');
@@ -2363,7 +2357,12 @@ function renderApp() {
 
             <div class="input-group">
               <label for="announcement-content">Content</label>
-              <textarea id="announcement-content" rows="6" placeholder="Write your announcement here…"></textarea>
+              <div class="ann-format-bar">
+                <button type="button" class="ann-fmt-btn" id="ann-btn-bold" title="Bold"><b>B</b></button>
+                <button type="button" class="ann-fmt-btn" id="ann-btn-italic" title="Italic"><i>I</i></button>
+                <button type="button" class="ann-fmt-btn" id="ann-btn-underline" title="Underline"><u>U</u></button>
+              </div>
+              <div id="announcement-content" class="ann-content-editable" contenteditable="true" data-placeholder="Write your announcement here…"></div>
             </div>
 
             <div class="announcement-preview" id="announcement-preview" style="display:none">
@@ -2800,6 +2799,14 @@ function renderApp() {
   document.getElementById('btn-save-announcement').addEventListener('click', saveAnnouncement);
   document.getElementById('announcement-title').addEventListener('input', updateAnnouncementPreview);
   document.getElementById('announcement-content').addEventListener('input', updateAnnouncementPreview);
+  ['ann-btn-bold', 'ann-btn-italic', 'ann-btn-underline'].forEach(id => {
+    const cmdMap = { 'ann-btn-bold': 'bold', 'ann-btn-italic': 'italic', 'ann-btn-underline': 'underline' };
+    document.getElementById(id).addEventListener('mousedown', e => {
+      e.preventDefault();
+      document.execCommand(cmdMap[id]);
+      updateAnnouncementPreview();
+    });
+  });
 
   // Court Lock
   document.getElementById('lock-cal-prev').addEventListener('click', () => {

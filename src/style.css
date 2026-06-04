@@ -1423,6 +1423,60 @@ tbody td {
   margin-bottom: 1rem;
 }
 
+.ann-format-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 0.4rem;
+}
+
+.ann-fmt-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-xs);
+  background: var(--white);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: all 0.12s ease;
+}
+
+.ann-fmt-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-ghost);
+}
+
+.ann-content-editable {
+  width: 100%;
+  min-height: 120px;
+  padding: 0.8rem 1rem;
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-family: 'Montserrat', sans-serif;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+}
+
+.ann-content-editable:focus {
+  border-color: var(--primary);
+  background: var(--white);
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.08);
+}
+
+.ann-content-editable:empty:before {
+  content: attr(data-placeholder);
+  color: #b0b8c4;
+  pointer-events: none;
+}
+
 .announcement-editor textarea {
   width: 100%;
   padding: 0.8rem 1rem;
@@ -1951,12 +2005,18 @@ tbody td {
 }
 
 .op-time-picker-field-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--primary);
-  margin-bottom: 0.5rem;
+  color: var(--white);
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary-light));
+  padding: 0.28rem 0.85rem;
+  border-radius: 999px;
+  margin-bottom: 0.65rem;
+  box-shadow: 0 2px 6px rgba(14, 116, 144, 0.25);
 }
 
 .op-time-picker {
