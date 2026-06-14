@@ -517,6 +517,16 @@ async function deleteOpenPlayRegistration(regId) {
   return sbFetch(`open_play_queue?id=eq.${regId}`, { method: 'DELETE' });
 }
 
+// Returns { [sessionId]: count } for the given session ids in one request.
+async function fetchOpenPlayRegistrationCounts(sessionIds) {
+  if (!sessionIds.length) return {};
+  const rows = await sbFetch(
+    `open_play_queue?session_id=in.(${sessionIds.join(',')})&select=session_id`);
+  const counts = {};
+  rows.forEach(r => { counts[r.session_id] = (counts[r.session_id] || 0) + 1; });
+  return counts;
+}
+
 // ─── COURT MANAGEMENT API ─────────────────────────────────────────────────────
 
 async function fetchCourts() {
@@ -1673,20 +1683,68 @@ function fmt12(timeStr) {
   return `${hour}:${String(m).padStart(2, '0')} ${period}`;
 }
 
+function fmtDateLabel(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[m - 1]} ${d}, ${y}`;
+}
+
+// A session is "passed" once its real end moment is behind `now`.
+// End times here are <= start times (e.g. 6:00 PM → 12:00 AM), so the
+// session crosses midnight and actually ends the NEXT day at end_time.
+function isSessionPassed(s, now) {
+  if (!s || !s.date) return false; // no date (unsaved) → never auto-deleted
+  const [y, mo, d] = s.date.split('-').map(Number);
+  const end = s.end_time || null;
+
+  // No end time: passed once the calendar day is fully over (next day 00:00).
+  if (!end) {
+    return now >= new Date(y, mo - 1, d + 1, 0, 0, 0);
+  }
+
+  const [eh, em] = end.split(':').map(Number);
+  let dayOffset = 0;
+  if (s.start_time) {
+    const [sh, sm] = s.start_time.split(':').map(Number);
+    if (eh * 60 + em <= sh * 60 + sm) dayOffset = 1; // crosses midnight
+  }
+  return now > new Date(y, mo - 1, d + dayOffset, eh, em, 0);
+}
+
 async function loadOpenPlay() {
   const container = document.getElementById('open-play-list');
   if (!container) return;
   container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading…</div>';
   try {
     const sessions = await fetchAllOpenPlaySessions();
-    renderOpenPlayTable(sessions);
+    const now = new Date();
+    const active = [];
+    const passedIds = [];
+    sessions.forEach(s => {
+      if (isSessionPassed(s, now)) passedIds.push(s.id);
+      else active.push(s);
+    });
+
+    // Soft-delete passed sessions (fire-and-forget; retried on next load).
+    passedIds.forEach(id => softDeleteOpenPlaySession(id).catch(err =>
+      console.error('Auto-delete failed for session', id, err)));
+
+    let counts = {};
+    try {
+      counts = await fetchOpenPlayRegistrationCounts(active.map(s => s.id));
+    } catch (err) {
+      console.error('Failed to load registration counts', err);
+    }
+    renderOpenPlayTable(active, counts);
   } catch (e) {
     container.innerHTML = '<div class="table-empty"><div class="icon">⚠️</div><p>Failed to load sessions</p></div>';
     console.error(e);
   }
 }
 
-function renderOpenPlayTable(sessions) {
+function renderOpenPlayTable(sessions, counts = {}) {
   const container = document.getElementById('open-play-list');
   if (!container) return;
 
@@ -1700,53 +1758,65 @@ function renderOpenPlayTable(sessions) {
     return;
   }
 
-  container.innerHTML = sessions.map(s => renderSessionRow(s)).join('');
+  container.innerHTML = sessions.map(s => renderSessionRow(s, counts[s.id] || 0)).join('');
   attachRowListeners(container);
 }
 
-function renderSessionRow(s = {}) {
+function renderSessionRow(s = {}, count = 0) {
   const id = s.id || '';
   const isNew = !id;
+  const dateLabel = s.date ? fmtDateLabel(s.date) : 'New schedule';
+  const timeLabel = (s.start_time || s.end_time)
+    ? `${fmt12(s.start_time)} – ${fmt12(s.end_time)}`
+    : 'Set time';
+  const countLabel = id ? `${count} / ${s.max_players ?? '—'} players` : '';
   return `
-    <div class="op-session-row${isNew ? ' op-session-new' : ''}" data-id="${id}">
-      <div class="op-select-checkbox-wrap">
-        <input type="checkbox" />
+    <div class="op-session-row${isNew ? ' op-session-new op-expanded' : ''}" data-id="${id}" data-count="${count}">
+      <div class="op-row-header">
+        <div class="op-select-checkbox-wrap">
+          <input type="checkbox" />
+        </div>
+        <span class="op-chevron">▸</span>
+        <div class="op-row-summary">
+          <span class="op-row-date">${dateLabel}</span>
+          <span class="op-row-time">${timeLabel}</span>
+        </div>
+        <span class="op-row-count">${countLabel}</span>
+        <label class="op-toggle op-row-toggle" title="Enabled">
+          <input type="checkbox" class="op-enabled" ${s.is_enabled ? 'checked' : ''} />
+          <span class="op-toggle-track"><span class="op-toggle-thumb"></span></span>
+        </label>
       </div>
-      <div class="op-session-fields">
-        <div class="input-group">
-          <label>Date</label>
-          <input type="date" class="op-date" value="${s.date || ''}" />
+      <div class="op-session-detail">
+        <div class="op-session-fields">
+          <div class="input-group">
+            <label>Date</label>
+            <input type="date" class="op-date" value="${s.date || ''}" />
+          </div>
+          <div class="input-group">
+            <label>Start</label>
+            <input type="time" class="op-start" value="${s.start_time || ''}" />
+          </div>
+          <div class="input-group">
+            <label>End</label>
+            <input type="time" class="op-end" value="${s.end_time || ''}" />
+          </div>
+          <div class="input-group">
+            <label>Price (₱)</label>
+            <input type="number" class="op-price" min="0" placeholder="50" value="${s.price_per_player ?? ''}" />
+          </div>
+          <div class="input-group">
+            <label>Max Players</label>
+            <input type="number" class="op-max" min="1" placeholder="20" value="${s.max_players ?? ''}" />
+          </div>
         </div>
-        <div class="input-group">
-          <label>Start</label>
-          <input type="time" class="op-start" value="${s.start_time || ''}" />
+        <div class="op-session-actions">
+          <button class="btn-primary op-btn-save" style="width:auto">Save</button>
+          <button class="op-btn-delete btn-icon-danger" title="Delete session">✕</button>
         </div>
-        <div class="input-group">
-          <label>End</label>
-          <input type="time" class="op-end" value="${s.end_time || ''}" />
-        </div>
-        <div class="input-group">
-          <label>Price (₱)</label>
-          <input type="number" class="op-price" min="0" placeholder="50" value="${s.price_per_player ?? ''}" />
-        </div>
-        <div class="input-group">
-          <label>Max Players</label>
-          <input type="number" class="op-max" min="1" placeholder="20" value="${s.max_players ?? ''}" />
-        </div>
-        <div class="input-group op-toggle-group">
-          <label>Enabled</label>
-          <label class="op-toggle">
-            <input type="checkbox" class="op-enabled" ${s.is_enabled ? 'checked' : ''} />
-            <span class="op-toggle-track"><span class="op-toggle-thumb"></span></span>
-          </label>
-        </div>
+        <div class="op-session-status"></div>
+        <div class="op-registrations-panel"></div>
       </div>
-      <div class="op-session-actions">
-        <button class="btn-primary op-btn-save" style="width:auto">Save</button>
-        <button class="op-btn-delete btn-icon-danger" title="Delete session">✕</button>
-      </div>
-      <div class="op-session-status"></div>
-      <div class="op-registrations-panel" style="display:none"></div>
     </div>`;
 }
 
@@ -1770,16 +1840,17 @@ function attachRowListeners(container) {
       renderSelectToolbar();
     });
 
-    row.querySelector('.op-session-fields').addEventListener('click', e => {
-      if (e.target.tagName === 'INPUT') return;
-      if (!row.dataset.id) return;
+    row.querySelector('.op-row-header').addEventListener('click', e => {
+      // The enabled toggle and the select checkbox handle their own clicks.
+      if (e.target.closest('.op-toggle')) return;
+      if (e.target.closest('.op-select-checkbox-wrap')) return;
       if (opSelectMode) {
-        const cb = row.querySelector('.op-select-checkbox-wrap input');
+        if (!row.dataset.id) return;
         cb.checked = !cb.checked;
         cb.dispatchEvent(new Event('change'));
         return;
       }
-      toggleRegistrationsPanel(row);
+      toggleRowExpand(row);
     });
   });
 }
@@ -1905,18 +1976,18 @@ function confirmDeleteSession(onConfirm) {
   modal.addEventListener('click', e => { if (e.target === modal) close(); }, { once: true });
 }
 
-async function toggleRegistrationsPanel(row) {
-  const panel = row.querySelector('.op-registrations-panel');
-  const isOpen = panel.style.display !== 'none';
-  if (isOpen) { panel.style.display = 'none'; return; }
-  panel.style.display = 'block';
-  const maxPlayers = parseInt(row.querySelector('.op-max').value) || 0;
-  renderRegistrationsPanel(row, maxPlayers);
+function toggleRowExpand(row) {
+  const willExpand = !row.classList.contains('op-expanded');
+  row.classList.toggle('op-expanded', willExpand);
+  if (willExpand && row.dataset.id) {
+    const maxPlayers = parseInt(row.querySelector('.op-max').value) || 0;
+    renderRegistrationsPanel(row, maxPlayers);
+  }
 }
 
 async function renderRegistrationsPanel(row, maxPlayers) {
   const panel = row.querySelector('.op-registrations-panel');
-  if (panel.style.display === 'none') return;
+  if (!row.classList.contains('op-expanded')) return;
   const sessionId = row.dataset.id;
   if (!sessionId) return;
 
@@ -1924,6 +1995,10 @@ async function renderRegistrationsPanel(row, maxPlayers) {
 
   try {
     const regs = await fetchOpenPlayRegistrations(sessionId);
+    // Keep the collapsed header count in sync with the live list.
+    row.dataset.count = regs.length;
+    const countEl = row.querySelector('.op-row-count');
+    if (countEl) countEl.textContent = `${regs.length} / ${maxPlayers || '—'} players`;
     const spotsLeft = maxPlayers - regs.length;
 
     if (regs.length === 0) {

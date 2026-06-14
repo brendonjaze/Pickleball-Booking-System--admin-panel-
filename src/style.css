@@ -3085,11 +3085,73 @@ tbody td {
   box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
 }
 
+/* ─── Open Play: collapsed list row ─────────────────────────── */
+.op-row-header {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.op-chevron {
+  color: var(--muted);
+  font-size: 0.8rem;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.op-session-row.op-expanded .op-chevron {
+  transform: rotate(90deg);
+}
+
+.op-row-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.op-row-date {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.op-row-time {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.op-row-count {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.op-row-toggle {
+  flex-shrink: 0;
+}
+
+/* Detail section — hidden until the row is expanded */
+.op-session-detail {
+  display: none;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-light);
+}
+
+.op-session-row.op-expanded .op-session-detail {
+  display: block;
+}
+
 .op-session-fields {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 1rem;
-  cursor: pointer;
+  cursor: default;
 }
 
 .op-toggle-group {
