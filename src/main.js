@@ -1156,13 +1156,13 @@ const LOCK_TIME_SLOTS = [
   '8:00 PM – 9:00 PM',
   '9:00 PM – 10:00 PM',
   '10:00 PM – 11:00 PM',
-  '11:00 PM – 12:00 AM (Midnight)',
+  '11:00 PM – 12:00 AM',
 ];
 
 const LOCK_TIME_GROUPS = [
   { label: 'Morning', icon: '☀️', slots: ['9:00 AM – 10:00 AM', '10:00 AM – 11:00 AM', '11:00 AM – 12:00 PM'] },
   { label: 'Afternoon', icon: '⛅', slots: ['12:00 PM – 1:00 PM', '1:00 PM – 2:00 PM', '2:00 PM – 3:00 PM', '3:00 PM – 4:00 PM', '4:00 PM – 5:00 PM'] },
-  { label: 'Evening', icon: '🌙', slots: ['5:00 PM – 6:00 PM', '6:00 PM – 7:00 PM', '7:00 PM – 8:00 PM', '8:00 PM – 9:00 PM', '9:00 PM – 10:00 PM', '10:00 PM – 11:00 PM', '11:00 PM – 12:00 AM (Midnight)'] },
+  { label: 'Evening', icon: '🌙', slots: ['5:00 PM – 6:00 PM', '6:00 PM – 7:00 PM', '7:00 PM – 8:00 PM', '8:00 PM – 9:00 PM', '9:00 PM – 10:00 PM', '10:00 PM – 11:00 PM', '11:00 PM – 12:00 AM'] },
 ];
 
 const OP_TIME_GROUPS = [
