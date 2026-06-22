@@ -2214,6 +2214,10 @@ async function handleAddCourt() {
 
 // ─── PRICING SETTINGS LOGIC ───────────────────────────────────────────────────
 
+// Evening rate begins at 6 PM (18:00). Fixed in code — the admin only sets the
+// two rates, never the cutoff time.
+const EVENING_START_HOUR = 18;
+
 function hourLabel(h) {
   const ampm = h < 12 ? 'AM' : 'PM';
   let h12 = h % 12;
@@ -2226,9 +2230,8 @@ function updatePricingHint() {
   if (!hint) return;
   const d = document.getElementById('pricing-daytime').value;
   const e = document.getElementById('pricing-evening').value;
-  const c = parseInt(document.getElementById('pricing-cutoff').value, 10);
-  if (d && e && Number.isInteger(c) && c >= 0 && c <= 23) {
-    hint.textContent = `Players pay ₱${d}/hr for slots starting before ${hourLabel(c)}, then ₱${e}/hr from ${hourLabel(c)} onward.`;
+  if (d && e) {
+    hint.textContent = `Players pay ₱${d}/hr for slots starting before ${hourLabel(EVENING_START_HOUR)}, then ₱${e}/hr from ${hourLabel(EVENING_START_HOUR)} onward.`;
   } else {
     hint.textContent = '';
   }
@@ -2242,7 +2245,6 @@ async function loadPricing() {
     if (row) {
       document.getElementById('pricing-daytime').value = Number(row.daytime_rate);
       document.getElementById('pricing-evening').value = Number(row.evening_rate);
-      document.getElementById('pricing-cutoff').value = Number(row.cutoff_hour);
     } else if (errEl) {
       errEl.textContent = 'No pricing row found. Run the pricing_settings migration in Supabase first.';
     }
@@ -2259,14 +2261,9 @@ async function handleSavePricing() {
 
   const daytime = Number(document.getElementById('pricing-daytime').value);
   const evening = Number(document.getElementById('pricing-evening').value);
-  const cutoff = Number(document.getElementById('pricing-cutoff').value);
 
   if (!(daytime > 0)) { errEl.textContent = 'Enter a valid daytime rate (greater than 0).'; return; }
   if (!(evening > 0)) { errEl.textContent = 'Enter a valid evening rate (greater than 0).'; return; }
-  if (!Number.isInteger(cutoff) || cutoff < 0 || cutoff > 23) {
-    errEl.textContent = 'Evening start hour must be a whole number from 0 to 23.';
-    return;
-  }
 
   btn.disabled = true;
   btn.textContent = 'Saving…';
@@ -2274,12 +2271,11 @@ async function handleSavePricing() {
     const result = await updatePricingSettings({
       daytime_rate: daytime,
       evening_rate: evening,
-      cutoff_hour: cutoff,
+      cutoff_hour: EVENING_START_HOUR,   // always 6 PM — kept fixed in the DB
     });
     // Verify the write landed — an RLS-blocked update returns 0 rows, not an error.
     const row = Array.isArray(result) ? result[0] : null;
-    if (!row || Number(row.daytime_rate) !== daytime ||
-        Number(row.evening_rate) !== evening || Number(row.cutoff_hour) !== cutoff) {
+    if (!row || Number(row.daytime_rate) !== daytime || Number(row.evening_rate) !== evening) {
       throw new Error('Save did not persist. Confirm the pricing_settings row exists and admin writes are allowed.');
     }
     showToast('Pricing updated successfully.');
@@ -2622,11 +2618,7 @@ function renderApp() {
           <div class="section-title">🏓 Manage Courts</div>
           <p class="section-desc">Add or deactivate courts. Changes reflect immediately on the booking page.</p>
 
-          <div class="courts-list" id="courts-list">
-            <div class="loading-spinner"><div class="spinner"></div>Loading courts…</div>
-          </div>
-
-          <div class="section-title" style="margin-top:2rem">Add New Court</div>
+          <div class="section-title">Add New Court</div>
           <div class="court-add-form">
             <div class="filter-group">
               <label for="court-name">Court Name</label>
@@ -2657,31 +2649,32 @@ function renderApp() {
           </div>
           <div class="form-error" id="court-form-error"></div>
 
+          <div class="section-title" style="margin-top:2rem">Current Courts</div>
+          <div class="courts-list" id="courts-list">
+            <div class="loading-spinner"><div class="spinner"></div>Loading courts…</div>
+          </div>
+
         </div><!-- /tab-courts -->
 
         <!-- ═══ PRICING TAB ═══ -->
         <div class="tab-content" id="tab-pricing">
           <div class="section-title">💵 Court Pricing</div>
-          <p class="section-desc">Time-based rental rate for all courts. Applies to every court and overrides the per-court "price per hour" (now only a fallback). Changes show on the booking page after the next page refresh.</p>
+          <p class="section-desc">Time-based rental rate for all courts. The rate switches automatically at <strong>6 PM</strong> — daytime before, evening after. Applies to every court and overrides the per-court "price per hour" (now only a fallback). Changes show on the booking page after the next page refresh.</p>
 
           <div class="court-add-form">
             <div class="filter-group">
-              <label for="pricing-daytime">Daytime rate (before cutoff)</label>
+              <label for="pricing-daytime">Daytime rate (before 6 PM)</label>
               <div class="price-input-wrapper">
                 <span class="price-prefix">₱</span>
                 <input type="number" id="pricing-daytime" min="1" step="1" placeholder="150" />
               </div>
             </div>
             <div class="filter-group">
-              <label for="pricing-evening">Evening rate (cutoff and after)</label>
+              <label for="pricing-evening">Evening rate (6 PM – midnight)</label>
               <div class="price-input-wrapper">
                 <span class="price-prefix">₱</span>
                 <input type="number" id="pricing-evening" min="1" step="1" placeholder="200" />
               </div>
-            </div>
-            <div class="filter-group">
-              <label for="pricing-cutoff">Evening start hour (0–23, 24h)</label>
-              <input type="number" id="pricing-cutoff" min="0" max="23" step="1" placeholder="18" />
             </div>
             <button class="btn-primary" id="btn-save-pricing">Save Pricing</button>
           </div>
@@ -3046,7 +3039,7 @@ function renderApp() {
 
   // Pricing tab
   document.getElementById('btn-save-pricing')?.addEventListener('click', handleSavePricing);
-  ['pricing-daytime', 'pricing-evening', 'pricing-cutoff'].forEach(id => {
+  ['pricing-daytime', 'pricing-evening'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', updatePricingHint);
   });
   // Open Play
