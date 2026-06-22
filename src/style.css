@@ -2769,6 +2769,10 @@ tbody td {
   user-select: none;
 }
 
+.price-prefix svg {
+  display: block;
+}
+
 .price-input-wrapper input[type="number"] {
   border: none;
   outline: none;
