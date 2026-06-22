@@ -547,6 +547,22 @@ async function updateCourt(id, data) {
   });
 }
 
+// ─── PRICING SETTINGS API ─────────────────────────────────────────────────────
+// Time-based court pricing lives in a single row (id = 1) of pricing_settings.
+async function fetchPricingSettings() {
+  const rows = await sbFetch('pricing_settings?select=*&order=id.asc&limit=1');
+  return Array.isArray(rows) && rows.length ? rows[0] : null;
+}
+
+async function updatePricingSettings(data) {
+  // PATCH the single row; sbFetch sends Prefer: return=representation, so the
+  // updated row comes back and we can verify the write actually landed.
+  return sbFetch('pricing_settings?id=eq.1', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── STATE ────────────────────────────────────────────────────────────────────
 
 let allBookings = [];
@@ -1058,6 +1074,7 @@ function switchTab(tab) {
   if (tab === 'revenue') updateRevenue();
   if (tab === 'announcements') loadAnnouncement();
   if (tab === 'courts') renderCourtsTab();
+  if (tab === 'pricing') loadPricing();
   if (tab === 'open-play') loadOpenPlay();
   if (tab === 'locks') {
     renderLockCalendar();
@@ -2195,6 +2212,87 @@ async function handleAddCourt() {
   }
 }
 
+// ─── PRICING SETTINGS LOGIC ───────────────────────────────────────────────────
+
+function hourLabel(h) {
+  const ampm = h < 12 ? 'AM' : 'PM';
+  let h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return `${h12} ${ampm}`;
+}
+
+function updatePricingHint() {
+  const hint = document.getElementById('pricing-hint');
+  if (!hint) return;
+  const d = document.getElementById('pricing-daytime').value;
+  const e = document.getElementById('pricing-evening').value;
+  const c = parseInt(document.getElementById('pricing-cutoff').value, 10);
+  if (d && e && Number.isInteger(c) && c >= 0 && c <= 23) {
+    hint.textContent = `Players pay ₱${d}/hr for slots starting before ${hourLabel(c)}, then ₱${e}/hr from ${hourLabel(c)} onward.`;
+  } else {
+    hint.textContent = '';
+  }
+}
+
+async function loadPricing() {
+  const errEl = document.getElementById('pricing-form-error');
+  if (errEl) errEl.textContent = '';
+  try {
+    const row = await fetchPricingSettings();
+    if (row) {
+      document.getElementById('pricing-daytime').value = Number(row.daytime_rate);
+      document.getElementById('pricing-evening').value = Number(row.evening_rate);
+      document.getElementById('pricing-cutoff').value = Number(row.cutoff_hour);
+    } else if (errEl) {
+      errEl.textContent = 'No pricing row found. Run the pricing_settings migration in Supabase first.';
+    }
+  } catch (e) {
+    if (errEl) errEl.textContent = 'Failed to load pricing. ' + (e.message || '');
+  }
+  updatePricingHint();
+}
+
+async function handleSavePricing() {
+  const errEl = document.getElementById('pricing-form-error');
+  const btn = document.getElementById('btn-save-pricing');
+  errEl.textContent = '';
+
+  const daytime = Number(document.getElementById('pricing-daytime').value);
+  const evening = Number(document.getElementById('pricing-evening').value);
+  const cutoff = Number(document.getElementById('pricing-cutoff').value);
+
+  if (!(daytime > 0)) { errEl.textContent = 'Enter a valid daytime rate (greater than 0).'; return; }
+  if (!(evening > 0)) { errEl.textContent = 'Enter a valid evening rate (greater than 0).'; return; }
+  if (!Number.isInteger(cutoff) || cutoff < 0 || cutoff > 23) {
+    errEl.textContent = 'Evening start hour must be a whole number from 0 to 23.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const result = await updatePricingSettings({
+      daytime_rate: daytime,
+      evening_rate: evening,
+      cutoff_hour: cutoff,
+    });
+    // Verify the write landed — an RLS-blocked update returns 0 rows, not an error.
+    const row = Array.isArray(result) ? result[0] : null;
+    if (!row || Number(row.daytime_rate) !== daytime ||
+        Number(row.evening_rate) !== evening || Number(row.cutoff_hour) !== cutoff) {
+      throw new Error('Save did not persist. Confirm the pricing_settings row exists and admin writes are allowed.');
+    }
+    showToast('Pricing updated successfully.');
+    updatePricingHint();
+  } catch (e) {
+    errEl.textContent = 'Failed to save pricing. ' + (e.message || '');
+    showToast('Failed to save pricing.', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Pricing';
+  }
+}
+
 // ─── RENDER APP ───────────────────────────────────────────────────────────────
 
 function renderApp() {
@@ -2289,6 +2387,10 @@ function renderApp() {
           <button class="tab-btn" data-tab="courts">
             <span class="tab-icon">🏓</span>
             Courts
+          </button>
+          <button class="tab-btn" data-tab="pricing">
+            <span class="tab-icon">💵</span>
+            Pricing
           </button>
         </div>
 
@@ -2556,6 +2658,37 @@ function renderApp() {
           <div class="form-error" id="court-form-error"></div>
 
         </div><!-- /tab-courts -->
+
+        <!-- ═══ PRICING TAB ═══ -->
+        <div class="tab-content" id="tab-pricing">
+          <div class="section-title">💵 Court Pricing</div>
+          <p class="section-desc">Time-based rental rate for all courts. Applies to every court and overrides the per-court "price per hour" (now only a fallback). Changes show on the booking page after the next page refresh.</p>
+
+          <div class="court-add-form">
+            <div class="filter-group">
+              <label for="pricing-daytime">Daytime rate (before cutoff)</label>
+              <div class="price-input-wrapper">
+                <span class="price-prefix">₱</span>
+                <input type="number" id="pricing-daytime" min="1" step="1" placeholder="150" />
+              </div>
+            </div>
+            <div class="filter-group">
+              <label for="pricing-evening">Evening rate (cutoff and after)</label>
+              <div class="price-input-wrapper">
+                <span class="price-prefix">₱</span>
+                <input type="number" id="pricing-evening" min="1" step="1" placeholder="200" />
+              </div>
+            </div>
+            <div class="filter-group">
+              <label for="pricing-cutoff">Evening start hour (0–23, 24h)</label>
+              <input type="number" id="pricing-cutoff" min="0" max="23" step="1" placeholder="18" />
+            </div>
+            <button class="btn-primary" id="btn-save-pricing">Save Pricing</button>
+          </div>
+          <p class="section-desc" id="pricing-hint" style="margin-top:0.75rem"></p>
+          <div class="form-error" id="pricing-form-error"></div>
+
+        </div><!-- /tab-pricing -->
 
         <!-- ═══ OPEN PLAY TAB ═══ -->
         <div class="tab-content" id="tab-open-play">
@@ -2910,6 +3043,12 @@ function renderApp() {
     if (e.target === e.currentTarget) closeLockMonthConfirmModal();
   });
   document.getElementById('btn-add-court')?.addEventListener('click', handleAddCourt);
+
+  // Pricing tab
+  document.getElementById('btn-save-pricing')?.addEventListener('click', handleSavePricing);
+  ['pricing-daytime', 'pricing-evening', 'pricing-cutoff'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', updatePricingHint);
+  });
   // Open Play
   document.getElementById('btn-select-sessions').addEventListener('click', () => {
     if (opSelectMode) exitSelectMode(); else enterSelectMode();
