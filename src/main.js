@@ -795,14 +795,16 @@ function updateRevenue() {
     }).join('');
   }
 
-  // Payment breakdown
-  const gcashBookings = filtered.filter(b => b.payment_method === 'GCash');
+  // Payment breakdown. Online checkout stores 'QRPh (GCash/Maya/ShopeePay)'
+  // (and older rows may say 'GCash'), so bucket everything that isn't Cash as
+  // QR Payment — that way the two cards always reconcile with the headline total.
   const cashBookings = filtered.filter(b => b.payment_method === 'Cash');
-  const gcashRevenue = gcashBookings.reduce((sum, b) => sum + rateForBooking(b), 0);
+  const qrBookings = filtered.filter(b => b.payment_method !== 'Cash');
+  const qrRevenue = qrBookings.reduce((sum, b) => sum + rateForBooking(b), 0);
   const cashRevenue = cashBookings.reduce((sum, b) => sum + rateForBooking(b), 0);
 
-  document.getElementById('rev-gcash-amount').textContent = `₱${gcashRevenue.toLocaleString()}`;
-  document.getElementById('rev-gcash-count').textContent = `${gcashBookings.length} hours`;
+  document.getElementById('rev-gcash-amount').textContent = `₱${qrRevenue.toLocaleString()}`;
+  document.getElementById('rev-gcash-count').textContent = `${qrBookings.length} hours`;
   document.getElementById('rev-cash-amount').textContent = `₱${cashRevenue.toLocaleString()}`;
   document.getElementById('rev-cash-count').textContent = `${cashBookings.length} hours`;
 }
@@ -831,9 +833,13 @@ function populateCourtDropdowns() {
 }
 
 function paymentBadge(method) {
-  const cls = method === 'GCash' ? 'gcash' : 'cash';
-  const icon = method === 'GCash' ? '📱' : '💵';
-  return `<span class="payment-badge ${cls}">${icon} ${method}</span>`;
+  // Everything that isn't Cash is an online QR payment (stored as
+  // 'QRPh (GCash/Maya/ShopeePay)', or 'GCash' on older rows).
+  const isCash = method === 'Cash';
+  const cls = isCash ? 'cash' : 'gcash';
+  const icon = isCash ? '💵' : '💳';
+  const label = isCash ? 'Cash' : 'QR Payment';
+  return `<span class="payment-badge ${cls}">${icon} ${label}</span>`;
 }
 
 function renderDateCell(dateStr) {
@@ -2567,7 +2573,7 @@ function renderApp() {
           <div class="section-title" style="margin-top:1.5rem">By Payment Method</div>
           <div class="revenue-grid two-col">
             <div class="revenue-card gcash-card">
-              <div class="rev-card-label">📱 GCash</div>
+              <div class="rev-card-label">💳 QR Payment</div>
               <div class="rev-card-amount" id="rev-gcash-amount">₱0</div>
               <div class="rev-card-meta" id="rev-gcash-count">0 hours</div>
             </div>
