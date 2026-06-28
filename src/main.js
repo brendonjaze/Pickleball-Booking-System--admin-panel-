@@ -5,6 +5,8 @@ import './style.css';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const SESSION_KEY = 'glan_admin_token';
+const REFRESH_KEY = 'glan_admin_refresh';
+let refreshInFlight = null; // de-dupes concurrent token refreshes
 
 let allCourts = []; // populated on load from Supabase
 
@@ -33,9 +35,40 @@ async function signIn(email, password) {
 
   if (!res.ok) throw new Error('Invalid credentials');
 
-  const { access_token } = await res.json();
+  const { access_token, refresh_token } = await res.json();
   localStorage.setItem(SESSION_KEY, access_token);
+  if (refresh_token) localStorage.setItem(REFRESH_KEY, refresh_token);
   return access_token;
+}
+
+// Exchanges the stored refresh token for a fresh access token. Returns the new
+// token, or null if there's no refresh token or it's no longer valid. Concurrent
+// callers share one in-flight request so a single rotation can't invalidate the
+// others (Supabase refresh tokens rotate on each use).
+function refreshSession() {
+  if (refreshInFlight) return refreshInFlight;
+  const p = (async () => {
+    const refresh_token = localStorage.getItem(REFRESH_KEY);
+    if (!refresh_token) return null;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data.access_token) return null;
+      localStorage.setItem(SESSION_KEY, data.access_token);
+      if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
+      return data.access_token;
+    } catch {
+      return null;
+    }
+  })();
+  refreshInFlight = p;
+  p.finally(() => { if (refreshInFlight === p) refreshInFlight = null; });
+  return p;
 }
 
 async function signOut() {
@@ -50,18 +83,18 @@ async function signOut() {
     }).catch(() => {});
   }
   localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(REFRESH_KEY);
 }
 
 // ─── SUPABASE HELPERS ─────────────────────────────────────────────────────────
 
-async function sbFetch(path, options = {}) {
-  const token = getToken();
+async function sbFetch(path, options = {}, _allowRefresh = true) {
   const url = `${SUPABASE_URL}/rest/v1/${path}`;
   const res = await fetch(url, {
     ...options,
     headers: {
       'apikey': SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${getToken()}`,
       'Content-Type': 'application/json',
       'Prefer': 'return=representation',
       ...(options.headers || {}),
@@ -69,7 +102,13 @@ async function sbFetch(path, options = {}) {
   });
 
   if (res.status === 401) {
+    // Access token likely expired — try a one-shot refresh, then replay once.
+    if (_allowRefresh) {
+      const newToken = await refreshSession();
+      if (newToken) return sbFetch(path, options, false);
+    }
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     logout();
     throw new Error('Session expired. Please sign in again.');
   }
@@ -566,6 +605,7 @@ async function updatePricingSettings(data) {
 // ─── STATE ────────────────────────────────────────────────────────────────────
 
 let allBookings = [];
+let pricingSettings = null; // time-based rates ({ daytime_rate, evening_rate, cutoff_hour })
 let pendingDeleteRef = null;
 let currentRevenuePeriod = 'monthly';
 let lastUpdatedTime = null;
@@ -639,6 +679,40 @@ function formatLastUpdated() {
   return lastUpdatedTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+// ─── PRICING / COURT HELPERS ────────────────────────────────────────────────────
+
+// Courts customers can currently book. allCourts stays the full list (needed for
+// historical booking badges and the Courts management tab); active-only is for
+// dropdowns, dashboards and lock targets.
+function activeCourts() {
+  return allCourts.filter(c => c.is_active);
+}
+
+// Courts to show in a per-court breakdown for a given set of slot rows: every
+// active court, plus any now-inactive court that still has data in the set, so
+// the cards always reconcile with the headline total.
+function courtsForBreakdown(rows) {
+  return allCourts.filter(c => c.is_active || rows.some(b => b.court_id === c.id));
+}
+
+// Revenue must mirror what the booking app charges. New bookings record the
+// exact amount paid in `price` (pesos, per slot) — use it verbatim so a later
+// rate change never rewrites historical revenue. Only legacy rows saved before
+// `price` existed fall back to re-deriving the time-based rate (switching at
+// EVENING_START_HOUR / 6 PM), and to the court's flat price_per_hour if pricing
+// settings haven't loaded or the rate is invalid.
+function rateForBooking(b) {
+  const stored = Number(b.price);
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  const court = allCourts.find(c => c.id === b.court_id);
+  const fallback = court ? court.price_per_hour : 100;
+  if (!pricingSettings) return fallback;
+  const startHour = Math.floor(parseTimeToMinutes(b.time_slot) / 60);
+  const cutoff = Number(pricingSettings.cutoff_hour) || EVENING_START_HOUR;
+  const rate = Number(startHour >= cutoff ? pricingSettings.evening_rate : pricingSettings.daytime_rate);
+  return rate > 0 ? rate : fallback;
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 function updateDashboard(bookings) {
@@ -651,15 +725,12 @@ function updateDashboard(bookings) {
 
   document.getElementById('stat-total').textContent = todayGrouped.length;
 
-  const todayRevenue = todayBookings.reduce((sum, b) => {
-    const court = allCourts.find(c => c.id === b.court_id);
-    return sum + (court ? court.price_per_hour : 100);
-  }, 0);
+  const todayRevenue = todayBookings.reduce((sum, b) => sum + rateForBooking(b), 0);
   document.getElementById('stat-revenue').textContent = `₱${todayRevenue.toLocaleString()}`;
 
   const courtStatContainer = document.getElementById('court-stat-cards');
   if (courtStatContainer) {
-    courtStatContainer.innerHTML = allCourts.map((court, i) => {
+    courtStatContainer.innerHTML = courtsForBreakdown(todayBookings).map((court, i) => {
       const count = todayGrouped.filter(b => b.court_id === court.id).length;
       const color = COURT_COLORS[i % COURT_COLORS.length];
       return `
@@ -697,10 +768,7 @@ function updateRevenue() {
     periodLabel = String(year);
   }
 
-  const totalRevenue = filtered.reduce((sum, b) => {
-    const court = allCourts.find(c => c.id === b.court_id);
-    return sum + (court ? court.price_per_hour : 100);
-  }, 0);
+  const totalRevenue = filtered.reduce((sum, b) => sum + rateForBooking(b), 0);
   const grouped = groupBookingsByRef(filtered);
 
   document.getElementById('revenue-period-label').textContent = periodLabel;
@@ -711,10 +779,10 @@ function updateRevenue() {
   // Court breakdown
   const courtCardsEl = document.getElementById('revenue-court-cards');
   if (courtCardsEl) {
-    courtCardsEl.innerHTML = allCourts.map((court, i) => {
+    courtCardsEl.innerHTML = courtsForBreakdown(filtered).map((court, i) => {
       const courtSlots = filtered.filter(b => b.court_id === court.id);
       const courtGrouped = groupBookingsByRef(courtSlots);
-      const amount = courtSlots.length * court.price_per_hour;
+      const amount = courtSlots.reduce((sum, b) => sum + rateForBooking(b), 0);
       const color = COURT_COLORS[i % COURT_COLORS.length];
       return `
         <div class="revenue-card" style="border-left: 4px solid ${color}">
@@ -730,14 +798,8 @@ function updateRevenue() {
   // Payment breakdown
   const gcashBookings = filtered.filter(b => b.payment_method === 'GCash');
   const cashBookings = filtered.filter(b => b.payment_method === 'Cash');
-  const gcashRevenue = gcashBookings.reduce((sum, b) => {
-    const court = allCourts.find(c => c.id === b.court_id);
-    return sum + (court ? court.price_per_hour : 100);
-  }, 0);
-  const cashRevenue = cashBookings.reduce((sum, b) => {
-    const court = allCourts.find(c => c.id === b.court_id);
-    return sum + (court ? court.price_per_hour : 100);
-  }, 0);
+  const gcashRevenue = gcashBookings.reduce((sum, b) => sum + rateForBooking(b), 0);
+  const cashRevenue = cashBookings.reduce((sum, b) => sum + rateForBooking(b), 0);
 
   document.getElementById('rev-gcash-amount').textContent = `₱${gcashRevenue.toLocaleString()}`;
   document.getElementById('rev-gcash-count').textContent = `${gcashBookings.length} hours`;
@@ -753,7 +815,7 @@ function courtBadge(id) {
 }
 
 function populateCourtDropdowns() {
-  const options = allCourts.map(c =>
+  const options = activeCourts().map(c =>
     `<option value="${c.id}">${c.name}</option>`
   ).join('');
 
@@ -1002,7 +1064,12 @@ async function loadBookings() {
 async function showAdmin() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('admin-app').classList.add('visible');
-  allCourts = await fetchCourts();
+  const [courts, pricing] = await Promise.all([
+    fetchCourts(),
+    fetchPricingSettings().catch(() => null),
+  ]);
+  allCourts = courts;
+  pricingSettings = pricing;
   populateCourtDropdowns();
   loadBookings();
 }
@@ -1404,7 +1471,7 @@ async function lockSelectedSlots() {
 
   const courtVal = document.getElementById('lock-court').value;
   const reason = document.getElementById('lock-reason').value.trim();
-  const courts = courtVal === 'all' ? allCourts.map(c => c.id) : [parseInt(courtVal)];
+  const courts = courtVal === 'all' ? activeCourts().map(c => c.id) : [parseInt(courtVal)];
   const lockGroup = `lock_${Date.now()}`;
 
   // Check for duplicates against existing locks
@@ -1515,7 +1582,7 @@ function openLockMonthConfirmModal() {
     return sum + new Date(y, m, 0).getDate();
   }, 0);
 
-  const courtCount = allCourts.length;
+  const courtCount = activeCourts().length;
   const slotCount = LOCK_TIME_SLOTS.length;
 
   document.getElementById('lock-month-confirm-summary').innerHTML =
@@ -1531,7 +1598,7 @@ function closeLockMonthConfirmModal() {
 
 async function executeLockMonths() {
   const reason = 'Month Lock';
-  const courtIds = allCourts.map(c => c.id);
+  const courtIds = activeCourts().map(c => c.id);
 
   if (courtIds.length === 0) {
     showToast('No courts loaded. Reload the page and try again.', true);
@@ -1634,7 +1701,9 @@ function renderCourtLocks() {
     const dateDisplay = dates.length === 1
       ? formatDisplayDate(dates[0])
       : `${formatDisplayDate(dates[0])} — ${formatDisplayDate(dates[dates.length - 1])} (${dates.length} days)`;
-    const courtDisplay = courts.length === 3
+    const activeIds = activeCourts().map(c => c.id);
+    const coversAllCourts = activeIds.length > 0 && activeIds.every(id => courts.includes(id));
+    const courtDisplay = coversAllCourts
       ? 'All Courts'
       : courts.map(c => allCourts.find(ct => ct.id === c)?.name || `Court ${c}`).join(', ');
 
@@ -2243,6 +2312,7 @@ async function loadPricing() {
   try {
     const row = await fetchPricingSettings();
     if (row) {
+      pricingSettings = row;
       document.getElementById('pricing-daytime').value = Number(row.daytime_rate);
       document.getElementById('pricing-evening').value = Number(row.evening_rate);
     } else if (errEl) {
@@ -2278,6 +2348,7 @@ async function handleSavePricing() {
     if (!row || Number(row.daytime_rate) !== daytime || Number(row.evening_rate) !== evening) {
       throw new Error('Save did not persist. Confirm the pricing_settings row exists and admin writes are allowed.');
     }
+    pricingSettings = row;
     showToast('Pricing updated successfully.');
     updatePricingHint();
   } catch (e) {
