@@ -2160,7 +2160,6 @@ function openEditCourtModal(court) {
   editingCourtId = court.id;
   document.getElementById('edit-court-name').value = court.name;
   setLocationToggle('edit-location-toggle', court.type);
-  document.getElementById('edit-court-price').value = court.price_per_hour;
   document.getElementById('edit-court-error').textContent = '';
   document.getElementById('edit-court-modal').classList.add('show');
 }
@@ -2173,20 +2172,19 @@ function closeEditCourtModal() {
 async function handleEditCourt() {
   const name = document.getElementById('edit-court-name').value.trim();
   const type = document.getElementById('edit-court-type').value;
-  const price = parseInt(document.getElementById('edit-court-price').value);
   const errEl = document.getElementById('edit-court-error');
   const btn = document.getElementById('btn-save-court');
 
   errEl.textContent = '';
 
   if (!name) { errEl.textContent = 'Court name is required.'; return; }
-  if (!price || price < 1) { errEl.textContent = 'Enter a valid price.'; return; }
 
   btn.disabled = true;
   btn.textContent = 'Saving…';
 
   try {
-    await updateCourt(editingCourtId, { name, type, price_per_hour: price });
+    // Price is set in the global Court Pricing tab now — only name/type here.
+    await updateCourt(editingCourtId, { name, type });
     allCourts = await fetchCourts();
     populateCourtDropdowns();
     renderCourtsTab();
@@ -2257,27 +2255,27 @@ function renderCourtsTab() {
 async function handleAddCourt() {
   const name = document.getElementById('court-name').value.trim();
   const type = document.getElementById('court-type').value;
-  const price = parseInt(document.getElementById('court-price').value);
   const errEl = document.getElementById('court-form-error');
   const btn = document.getElementById('btn-add-court');
 
   errEl.textContent = '';
 
   if (!name) { errEl.textContent = 'Court name is required.'; return; }
-  if (!price || price < 1) { errEl.textContent = 'Enter a valid price.'; return; }
 
   const maxOrder = allCourts.reduce((m, c) => Math.max(m, c.sort_order), 0);
+  // Per-court price is just a fallback now (real prices come from the global
+  // Court Pricing tab), so seed new courts with the current daytime rate.
+  const fallbackPrice = Number(pricingSettings?.daytime_rate) || 100;
 
   btn.disabled = true;
   btn.textContent = 'Adding…';
 
   try {
-    await createCourt({ name, type, price_per_hour: price, is_active: true, sort_order: maxOrder + 1 });
+    await createCourt({ name, type, price_per_hour: fallbackPrice, is_active: true, sort_order: maxOrder + 1 });
     allCourts = await fetchCourts();
     populateCourtDropdowns();
     renderCourtsTab();
     document.getElementById('court-name').value = '';
-    document.getElementById('court-price').value = '100';
     showToast(`${name} added successfully.`);
   } catch (e) {
     errEl.textContent = 'Failed to add court. Try again.';
@@ -2715,13 +2713,6 @@ function renderApp() {
                 <input type="hidden" id="court-type" value="Indoor" />
               </div>
             </div>
-            <div class="filter-group">
-              <label for="court-price">Price per Hour</label>
-              <div class="price-input-wrapper">
-                <span class="price-prefix">₱</span>
-                <input type="number" id="court-price" placeholder="100" min="1" value="100" />
-              </div>
-            </div>
             <button class="btn-primary btn-add-court" id="btn-add-court">+ Add Court</button>
           </div>
           <div class="form-error" id="court-form-error"></div>
@@ -2931,13 +2922,6 @@ function renderApp() {
                 Outdoor
               </button>
               <input type="hidden" id="edit-court-type" value="Indoor" />
-            </div>
-          </div>
-          <div class="input-group">
-            <label for="edit-court-price">Price per Hour</label>
-            <div class="price-input-wrapper">
-              <span class="price-prefix">₱</span>
-              <input type="number" id="edit-court-price" min="1" placeholder="100" />
             </div>
           </div>
           <div class="form-error" id="edit-court-error"></div>
