@@ -2093,12 +2093,23 @@ function confirmDeleteSession(onConfirm) {
   modal.addEventListener('click', e => { if (e.target === modal) close(); }, { once: true });
 }
 
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
 function toggleRowExpand(row) {
   const willExpand = !row.classList.contains('op-expanded');
   row.classList.toggle('op-expanded', willExpand);
   if (willExpand && row.dataset.id) {
     const maxPlayers = parseInt(row.querySelector('.op-max').value) || 0;
     renderRegistrationsPanel(row, maxPlayers);
+    if (row._opPoll) clearInterval(row._opPoll);
+    row._opPoll = setInterval(() => {
+      const pe = row.querySelector('.op-pending-panel');
+      if (pe) renderPendingRequests(row.dataset.id, pe, row, maxPlayers);
+    }, 10000);
+  } else if (!willExpand && row._opPoll) {
+    clearInterval(row._opPoll); row._opPoll = null;
   }
 }
 
@@ -2108,7 +2119,11 @@ async function renderRegistrationsPanel(row, maxPlayers) {
   const sessionId = row.dataset.id;
   if (!sessionId) return;
 
-  panel.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading registrations…</div>';
+  panel.innerHTML = `<div class="op-pending-panel"></div><div class="op-confirmed-panel"><div class="loading-spinner"><div class="spinner"></div>Loading registrations…</div></div>`;
+  const pendingEl = panel.querySelector('.op-pending-panel');
+  const confirmedEl = panel.querySelector('.op-confirmed-panel');
+
+  renderPendingRequests(sessionId, pendingEl, row, maxPlayers);
 
   try {
     const regs = await fetchOpenPlayRegistrations(sessionId);
@@ -2119,18 +2134,18 @@ async function renderRegistrationsPanel(row, maxPlayers) {
     const spotsLeft = maxPlayers - regs.length;
 
     if (regs.length === 0) {
-      panel.innerHTML = `
+      confirmedEl.innerHTML = `
         <div class="table-empty">
           <div class="icon">📋</div>
-          <p>No registrations yet</p>
-          <div class="sub">Players will appear here once they sign up</div>
+          <p>No confirmed players yet</p>
+          <div class="sub">Approved players will appear here</div>
         </div>`;
       return;
     }
 
-    panel.innerHTML = `
+    confirmedEl.innerHTML = `
       <div class="op-reg-header">
-        <span class="op-reg-count">${regs.length} registered</span>
+        <span class="op-reg-count">${regs.length} confirmed</span>
         <span class="op-spots-left ${spotsLeft <= 0 ? 'op-full' : ''}">${spotsLeft <= 0 ? 'Session Full' : `${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left`}</span>
       </div>
       <div class="op-reg-list">
@@ -2138,15 +2153,15 @@ async function renderRegistrationsPanel(row, maxPlayers) {
           <div class="op-reg-item">
             <span class="op-reg-num">${i + 1}</span>
             <div class="op-reg-info">
-              <span class="op-reg-name">${r.player_name || '—'}</span>
-              <span class="op-reg-phone">${r.mobile || '—'}</span>
+              <span class="op-reg-name">${escHtml(r.player_name || '—')}</span>
+              <span class="op-reg-phone">${escHtml(r.mobile || '—')}</span>
             </div>
-            <span class="op-reg-time">${new Date(r.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+            <span class="op-reg-time">${r.joined_at ? new Date(r.joined_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''}</span>
             <button class="op-reg-delete" data-id="${r.id}" title="Remove player">✕</button>
           </div>`).join('')}
       </div>`;
 
-    panel.querySelectorAll('.op-reg-delete').forEach(btn => {
+    confirmedEl.querySelectorAll('.op-reg-delete').forEach(btn => {
       btn.addEventListener('click', () => {
         const playerName = btn.closest('.op-reg-item').querySelector('.op-reg-name').textContent;
         confirmRemovePlayer(playerName, async () => {
@@ -2160,9 +2175,39 @@ async function renderRegistrationsPanel(row, maxPlayers) {
       });
     });
   } catch (e) {
-    panel.innerHTML = '<div class="table-empty"><div class="icon">⚠️</div><p>Failed to load registrations</p></div>';
+    confirmedEl.innerHTML = '<div class="table-empty"><div class="icon">⚠️</div><p>Failed to load registrations</p></div>';
     console.error(e);
   }
+}
+
+async function renderPendingRequests(sessionId, containerEl, row, maxPlayers) {
+  if (!containerEl) return;
+  let reqs;
+  try { reqs = await fetchOpenPlayRequests(sessionId); }
+  catch (e) { containerEl.innerHTML = ''; return; }
+  if (!reqs.length) { containerEl.innerHTML = ''; return; }
+  containerEl.innerHTML = `
+    <div class="op-pending-title" style="font-weight:700;margin:0.5rem 0;">Pending requests (${reqs.length})</div>
+    ${reqs.map(r => `
+      <div class="op-pending-row" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eee;">
+        <span style="flex:1;">${escHtml(r.player_name || '—')} · ${escHtml(r.mobile || '—')} · ${escHtml(r.skill_level)}</span>
+        <button class="btn-approve-req" data-id="${r.id}" style="background:#2e7d32;color:#fff;border:none;border-radius:8px;padding:4px 10px;cursor:pointer;">Approve</button>
+        <button class="btn-decline-req" data-id="${r.id}" style="background:#c62828;color:#fff;border:none;border-radius:8px;padding:4px 10px;cursor:pointer;">Decline</button>
+      </div>`).join('')}`;
+  containerEl.querySelectorAll('.btn-approve-req').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    let res;
+    try { res = await approveOpenPlayRequest(b.dataset.id); }
+    catch (e) { showToast('Approve failed.', true); b.disabled = false; return; }
+    if (res && res.ok) { showToast('Player approved.'); renderRegistrationsPanel(row, maxPlayers); }
+    else { showToast(res && res.reason === 'full' ? 'Session is full.' : 'Approve failed.', true); b.disabled = false; }
+  }));
+  containerEl.querySelectorAll('.btn-decline-req').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try { await declineOpenPlayRequest(b.dataset.id); showToast('Request declined.'); }
+    catch (e) { showToast('Decline failed.', true); b.disabled = false; return; }
+    renderPendingRequests(sessionId, containerEl, row, maxPlayers);
+  }));
 }
 
 // ─── COURTS MANAGEMENT ────────────────────────────────────────────────────────
