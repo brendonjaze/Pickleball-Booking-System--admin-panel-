@@ -552,6 +552,31 @@ async function fetchOpenPlayRegistrations(sessionId) {
   return sbFetch(`open_play_queue?session_id=eq.${sessionId}&select=*`);
 }
 
+async function fetchOpenPlayRequests(sessionId) {
+  return sbFetch(`open_play_join_requests?session_id=eq.${sessionId}&status=eq.pending&select=*&order=created_at.asc`);
+}
+async function approveOpenPlayRequest(requestId) {
+  const res = await sbFetch('rpc/approve_open_play_request', {
+    method: 'POST', body: JSON.stringify({ p_request_id: requestId }),
+  });
+  return Array.isArray(res) ? res[0] : res;
+}
+async function declineOpenPlayRequest(requestId) {
+  return sbFetch(`open_play_join_requests?id=eq.${requestId}`, {
+    method: 'PATCH', body: JSON.stringify({ status: 'declined', decided_at: new Date().toISOString() }),
+  });
+}
+async function fetchOpenPlayMessages(sessionId) {
+  return sbFetch(`open_play_messages?session_id=eq.${sessionId}&select=*&order=created_at.asc`);
+}
+async function postOpenPlayMessage(sessionId, body, imageUrl) {
+  return sbFetch('open_play_messages', {
+    method: 'POST',
+    body: JSON.stringify({ session_id: sessionId, sender_name: 'Organizer', is_organizer: true,
+                           body: body || null, image_url: imageUrl || null }),
+  });
+}
+
 async function deleteOpenPlayRegistration(regId) {
   return sbFetch(`open_play_queue?id=eq.${regId}`, { method: 'DELETE' });
 }
