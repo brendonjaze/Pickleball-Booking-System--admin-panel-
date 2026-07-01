@@ -1928,6 +1928,7 @@ function renderSessionRow(s = {}, count = 0) {
           </div>
         </div>
         <div class="op-session-actions">
+          <button class="op-btn-chat" style="width:auto" ${id ? '' : 'disabled'}>💬 Chat</button>
           <button class="btn-primary op-btn-save" style="width:auto">Save</button>
           <button class="op-btn-delete btn-icon-danger" title="Delete session">✕</button>
         </div>
@@ -1942,6 +1943,8 @@ function attachRowListeners(container) {
     row.querySelector('.op-enabled').addEventListener('change', () => autoSaveEnabled(row));
     row.querySelector('.op-btn-save').addEventListener('click', () => saveSessionRow(row));
     row.querySelector('.op-btn-delete').addEventListener('click', () => deleteSessionRow(row));
+    const chatBtn = row.querySelector('.op-btn-chat');
+    if (chatBtn) chatBtn.addEventListener('click', () => { if (row.dataset.id) openOrganizerChat(row.dataset.id); });
 
     const cb = row.querySelector('.op-select-checkbox-wrap input');
     cb.addEventListener('change', () => {
@@ -2208,6 +2211,60 @@ async function renderPendingRequests(sessionId, containerEl, row, maxPlayers) {
     catch (e) { showToast('Decline failed.', true); b.disabled = false; return; }
     renderPendingRequests(sessionId, containerEl, row, maxPlayers);
   }));
+}
+
+let orgChatPoll = null;
+function openOrganizerChat(sessionId) {
+  closeOrganizerChat();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay show';
+  overlay.id = 'org-chat-modal';
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width:440px;width:92%;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3 style="margin:0;">Session Chat</h3>
+        <button id="org-chat-close" style="background:none;border:none;font-size:1.4rem;cursor:pointer;">&times;</button>
+      </div>
+      <div id="org-chat-scroll" style="height:320px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#fafafa;"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <input id="org-chat-input" type="text" placeholder="Reply as organizer…" style="flex:1;padding:0.55rem 0.7rem;border:1px solid #ccc;border-radius:10px;" />
+        <button id="org-chat-send" style="background:#2e7d32;color:#fff;border:none;border-radius:10px;padding:0.55rem 0.9rem;font-weight:700;cursor:pointer;">Send</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#org-chat-close').addEventListener('click', closeOrganizerChat);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeOrganizerChat(); });
+  const send = async () => {
+    const inp = document.getElementById('org-chat-input');
+    const text = inp.value.trim(); if (!text) return;
+    inp.value = '';
+    try { await postOpenPlayMessage(sessionId, text); } catch (e) { showToast('Message failed.', true); inp.value = text; return; }
+    renderOrganizerChat(sessionId);
+  };
+  overlay.querySelector('#org-chat-send').addEventListener('click', send);
+  overlay.querySelector('#org-chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  renderOrganizerChat(sessionId);
+  orgChatPoll = setInterval(() => renderOrganizerChat(sessionId), 4000);
+}
+function closeOrganizerChat() {
+  if (orgChatPoll) { clearInterval(orgChatPoll); orgChatPoll = null; }
+  const ex = document.getElementById('org-chat-modal');
+  if (ex) ex.remove();
+}
+async function renderOrganizerChat(sessionId) {
+  const el = document.getElementById('org-chat-scroll'); if (!el) return;
+  let msgs;
+  try { msgs = await fetchOpenPlayMessages(sessionId); } catch (e) { return; }
+  el.innerHTML = (msgs || []).map(m => {
+    const who = m.is_organizer ? 'Organizer' : (m.sender_name || 'Player');
+    const align = m.is_organizer ? 'flex-end' : 'flex-start';
+    const img = m.image_url ? `<img src="${escHtml(m.image_url)}" style="max-width:180px;border-radius:8px;display:block;margin-top:4px;">` : '';
+    return `<div style="display:flex;flex-direction:column;align-items:${align};margin-bottom:8px;">
+      <div style="font-size:0.68rem;color:#888;">${escHtml(who)}</div>
+      <div style="max-width:80%;background:${m.is_organizer ? '#e8f0fe' : '#f1f1f1'};border-radius:10px;padding:6px 10px;font-size:0.85rem;word-break:break-word;">${m.body ? escHtml(m.body) : ''}${img}</div>
+    </div>`;
+  }).join('') || '<div style="text-align:center;color:#aaa;padding:1rem;">No messages yet.</div>';
+  el.scrollTop = el.scrollHeight;
 }
 
 // ─── COURTS MANAGEMENT ────────────────────────────────────────────────────────
