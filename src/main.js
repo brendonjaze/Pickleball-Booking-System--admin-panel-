@@ -126,11 +126,11 @@ async function fetchAllBookings() {
   return sbFetch('bookings?select=*&order=created_at.desc,time_slot.asc');
 }
 
+// Cancelling a booking hard-deletes every row in its group, freeing the slots.
+// All other (non-cancelled) bookings are kept permanently for revenue records.
 async function deleteBookingGroup(bookingRef) {
   return sbFetch(`bookings?booking_ref=eq.${encodeURIComponent(bookingRef)}`, { method: 'DELETE' });
 }
-
-// Bookings are never deleted — kept permanently for revenue tracking and records
 
 async function updateAuthUser(data) {
   const token = getToken();
@@ -258,10 +258,6 @@ async function createCourtLocks(locks) {
     body: JSON.stringify(locks),
     headers: { 'Prefer': 'return=minimal,resolution=ignore-duplicates' },
   });
-}
-
-async function deleteCourtLock(id) {
-  return sbFetch(`court_locks?id=eq.${id}`, { method: 'DELETE' });
 }
 
 async function deleteCourtLockGroup(groupId) {
@@ -577,8 +573,88 @@ async function postOpenPlayMessage(sessionId, body, imageUrl) {
   });
 }
 
+// ─── CHAT REACTIONS ──────────────────────────────────────────────────────────
+// One reaction per person per message (unique on message_id + reactor_token).
+// The organizer reacts under the shared token 'organizer'.
+
+const REACTION_EMOJIS = ['👍', '❤️', '😆', '😮', '😢', '😡'];
+const ORGANIZER_TOKEN = 'organizer';
+
+// Returns { [messageId]: [{ reactor_token, emoji }, …] } in one request.
+async function fetchReactionsFor(messageIds) {
+  if (!messageIds.length) return {};
+  const rows = await sbFetch(
+    `open_play_message_reactions?message_id=in.(${messageIds.join(',')})&select=message_id,reactor_token,emoji`);
+  const byMsg = {};
+  rows.forEach(r => { (byMsg[r.message_id] = byMsg[r.message_id] || []).push(r); });
+  return byMsg;
+}
+
+async function upsertOrganizerReaction(messageId, emoji) {
+  return sbFetch('open_play_message_reactions?on_conflict=message_id,reactor_token', {
+    method: 'POST',
+    headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+    body: JSON.stringify({
+      message_id: messageId, reactor_token: ORGANIZER_TOKEN,
+      reactor_name: 'Organizer', is_organizer: true, emoji,
+    }),
+  });
+}
+
+async function deleteOrganizerReaction(messageId) {
+  return sbFetch(
+    `open_play_message_reactions?message_id=eq.${messageId}&reactor_token=eq.${ORGANIZER_TOKEN}`,
+    { method: 'DELETE', headers: { 'Prefer': 'return=minimal' } });
+}
+
+// ─── CHAT TYPING INDICATOR ───────────────────────────────────────────────────
+// One open_play_typing row per (session, person), refreshed while typing.
+// "Typing" = the other party's row was updated within the last TYPING_FRESH_MS.
+
+const TYPING_FRESH_MS = 4000;
+let orgTypingLastSent = 0;
+
+async function sendOrganizerTyping(sessionId) {
+  const now = Date.now();
+  if (now - orgTypingLastSent < 2000) return; // throttle writes
+  orgTypingLastSent = now;
+  try {
+    await sbFetch('open_play_typing?on_conflict=session_id,actor_token', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=minimal,resolution=merge-duplicates' },
+      body: JSON.stringify({
+        session_id: sessionId, actor_token: ORGANIZER_TOKEN,
+        actor_name: 'Organizer', is_organizer: true,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  } catch (e) { /* typing is best-effort */ }
+}
+
+async function fetchPlayersTyping(sessionId) {
+  const since = new Date(Date.now() - TYPING_FRESH_MS).toISOString();
+  return sbFetch(
+    `open_play_typing?session_id=eq.${sessionId}&is_organizer=eq.false` +
+    `&updated_at=gte.${encodeURIComponent(since)}&select=actor_name`);
+}
+
 async function deleteOpenPlayRegistration(regId) {
   return sbFetch(`open_play_queue?id=eq.${regId}`, { method: 'DELETE' });
+}
+
+// Revenue inputs for Open Play: every live session plus a per-session player
+// count, plus the permanent revenue log — snapshots written by the purge
+// function just before a finished session (and its registrations) is deleted.
+async function fetchOpenPlayRevenueData() {
+  const [sessions, queueRows, log] = await Promise.all([
+    sbFetch('open_play_sessions?select=id,date,price_per_player'),
+    sbFetch('open_play_queue?select=session_id'),
+    // Table may not be migrated yet — degrade to live-only.
+    sbFetch('open_play_revenue_log?select=session_id,date,players,total').catch(() => []),
+  ]);
+  const counts = {};
+  queueRows.forEach(r => { counts[r.session_id] = (counts[r.session_id] || 0) + 1; });
+  return { sessions, counts, log };
 }
 
 // Returns { [sessionId]: count } for the given session ids in one request.
@@ -630,6 +706,7 @@ async function updatePricingSettings(data) {
 // ─── STATE ────────────────────────────────────────────────────────────────────
 
 let allBookings = [];
+let openPlayRevenueData = { sessions: [], counts: {}, log: [] }; // live sessions + counts + purge snapshots
 let pricingSettings = null; // time-based rates ({ daytime_rate, evening_rate, cutoff_hour })
 let pendingDeleteRef = null;
 let currentRevenuePeriod = 'monthly';
@@ -686,19 +763,6 @@ function formatDisplayDate(dateStr) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function getRelativeDay(dateStr) {
-  const today = todayStr();
-  const [ty, tm, td] = today.split('-').map(Number);
-  const todayDate = new Date(ty, tm - 1, td);
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const target = new Date(y, m - 1, d);
-  const diff = Math.round((target - todayDate) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff === -1) return 'Yesterday';
-  return null;
-}
-
 function formatLastUpdated() {
   if (!lastUpdatedTime) return '';
   return lastUpdatedTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
@@ -738,6 +802,31 @@ function rateForBooking(b) {
   return rate > 0 ? rate : fallback;
 }
 
+// Open Play income: players × price per player, filtered by date prefix
+// ('' = all time, 'YYYY' = a year, 'YYYY-MM' = a month, 'YYYY-MM-DD' = one day).
+// Live sessions + purge snapshots; a session is only ever in one of the two
+// (the log row is written as the session is deleted), but skip any overlap
+// defensively so nothing double-counts mid-purge.
+function openPlayRevenue(prefix) {
+  const { sessions, counts, log } = openPlayRevenueData;
+  let total = 0, players = 0;
+  const liveIds = new Set();
+  for (const s of sessions) {
+    liveIds.add(s.id);
+    if (!s.date || !s.date.startsWith(prefix)) continue;
+    const n = counts[s.id] || 0;
+    total += n * (Number(s.price_per_player) || 0);
+    players += n;
+  }
+  for (const row of log || []) {
+    if (liveIds.has(row.session_id)) continue;
+    if (!row.date || !row.date.startsWith(prefix)) continue;
+    total += Number(row.total) || 0;
+    players += Number(row.players) || 0;
+  }
+  return { total, players };
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 
 function updateDashboard(bookings) {
@@ -750,7 +839,8 @@ function updateDashboard(bookings) {
 
   document.getElementById('stat-total').textContent = todayGrouped.length;
 
-  const todayRevenue = todayBookings.reduce((sum, b) => sum + rateForBooking(b), 0);
+  const todayRevenue = todayBookings.reduce((sum, b) => sum + rateForBooking(b), 0)
+    + openPlayRevenue(today).total;
   document.getElementById('stat-revenue').textContent = `₱${todayRevenue.toLocaleString()}`;
 
   const courtStatContainer = document.getElementById('court-stat-cards');
@@ -793,13 +883,17 @@ function updateRevenue() {
     periodLabel = String(year);
   }
 
-  const totalRevenue = filtered.reduce((sum, b) => sum + rateForBooking(b), 0);
+  const periodPrefix = currentRevenuePeriod === 'monthly' ? `${year}-${month}` : String(year);
+  const op = openPlayRevenue(periodPrefix);
+  const totalRevenue = filtered.reduce((sum, b) => sum + rateForBooking(b), 0) + op.total;
   const grouped = groupBookingsByRef(filtered);
 
   document.getElementById('revenue-period-label').textContent = periodLabel;
   document.getElementById('revenue-total').textContent = `₱${totalRevenue.toLocaleString()}`;
   document.getElementById('revenue-bookings').textContent = grouped.length;
   document.getElementById('revenue-hours').textContent = `${filtered.length}h`;
+  const opPlayersEl = document.getElementById('revenue-op-players');
+  if (opPlayersEl) opPlayersEl.textContent = op.players;
 
   // Court breakdown
   const courtCardsEl = document.getElementById('revenue-court-cards');
@@ -822,7 +916,8 @@ function updateRevenue() {
 
   // Payment breakdown. Online checkout stores 'QRPh (GCash/Maya/ShopeePay)'
   // (and older rows may say 'GCash'), so bucket everything that isn't Cash as
-  // QR Payment — that way the two cards always reconcile with the headline total.
+  // QR Payment. QR + Cash (court bookings) + Open Play = headline total, so the
+  // three cards always reconcile with it.
   const cashBookings = filtered.filter(b => b.payment_method === 'Cash');
   const qrBookings = filtered.filter(b => b.payment_method !== 'Cash');
   const qrRevenue = qrBookings.reduce((sum, b) => sum + rateForBooking(b), 0);
@@ -832,6 +927,8 @@ function updateRevenue() {
   document.getElementById('rev-gcash-count').textContent = `${qrBookings.length} hours`;
   document.getElementById('rev-cash-amount').textContent = `₱${cashRevenue.toLocaleString()}`;
   document.getElementById('rev-cash-count').textContent = `${cashBookings.length} hours`;
+  document.getElementById('rev-openplay-amount').textContent = `₱${op.total.toLocaleString()}`;
+  document.getElementById('rev-openplay-count').textContent = `${op.players} player${op.players !== 1 ? 's' : ''}`;
 }
 
 // ─── TABLE ────────────────────────────────────────────────────────────────────
@@ -1063,7 +1160,14 @@ async function loadBookings() {
   if (refreshBtn) refreshBtn.classList.add('spinning');
 
   try {
-    allBookings = await fetchAllBookings();
+    const [bookings, opData] = await Promise.all([
+      fetchAllBookings(),
+      // Open Play revenue is additive — if it fails, keep the last known data
+      // rather than failing the whole bookings load.
+      fetchOpenPlayRevenueData().catch(() => openPlayRevenueData),
+    ]);
+    allBookings = bookings;
+    openPlayRevenueData = opData;
     lastUpdatedTime = new Date();
 
     applyFilters();
@@ -1103,10 +1207,13 @@ async function showAdmin() {
   pricingSettings = pricing;
   populateCourtDropdowns();
   loadBookings();
+  startChatHead();
 }
 
 function logout() {
   signOut();
+  stopChatHead();
+  closeOrganizerChat();
   document.getElementById('admin-app').classList.remove('visible');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-email').value = '';
@@ -1169,7 +1276,12 @@ function switchTab(tab) {
   const target = document.getElementById(`tab-${tab}`);
   if (target) target.classList.add('active');
 
-  if (tab === 'revenue') updateRevenue();
+  if (tab === 'revenue') {
+    updateRevenue(); // render immediately from cache…
+    fetchOpenPlayRevenueData() // …then refresh open play numbers in the background
+      .then(d => { openPlayRevenueData = d; updateRevenue(); })
+      .catch(() => {});
+  }
   if (tab === 'announcements') loadAnnouncement();
   if (tab === 'courts') renderCourtsTab();
   if (tab === 'pricing') loadPricing();
@@ -2214,6 +2326,7 @@ async function renderPendingRequests(sessionId, containerEl, row, maxPlayers) {
 }
 
 let orgChatPoll = null;
+let orgTypingPoll = null;
 function openOrganizerChat(sessionId) {
   closeOrganizerChat();
   const overlay = document.createElement('div');
@@ -2226,6 +2339,7 @@ function openOrganizerChat(sessionId) {
         <button id="org-chat-close" style="background:none;border:none;font-size:1.4rem;cursor:pointer;">&times;</button>
       </div>
       <div id="org-chat-scroll" style="height:320px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#fafafa;"></div>
+      <div id="org-chat-typing" class="chat-typing"></div>
       <div style="display:flex;gap:6px;margin-top:8px;">
         <input id="org-chat-input" type="text" placeholder="Reply as organizer…" style="flex:1;padding:0.55rem 0.7rem;border:1px solid #ccc;border-radius:10px;" />
         <button id="org-chat-send" style="background:#2e7d32;color:#fff;border:none;border-radius:10px;padding:0.55rem 0.9rem;font-weight:700;cursor:pointer;">Send</button>
@@ -2243,28 +2357,230 @@ function openOrganizerChat(sessionId) {
   };
   overlay.querySelector('#org-chat-send').addEventListener('click', send);
   overlay.querySelector('#org-chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  overlay.querySelector('#org-chat-input').addEventListener('input', () => sendOrganizerTyping(sessionId));
+  overlay.querySelector('#org-chat-scroll').addEventListener('click', e => onOrgChatClick(e, sessionId));
   renderOrganizerChat(sessionId);
   orgChatPoll = setInterval(() => renderOrganizerChat(sessionId), 4000);
+  orgTypingPoll = setInterval(async () => {
+    const el = document.getElementById('org-chat-typing');
+    if (!el) return;
+    try {
+      const rows = await fetchPlayersTyping(sessionId);
+      el.innerHTML = rows.length
+        ? `${escHtml(rows[0].actor_name || 'Player')}${rows.length > 1 ? ` +${rows.length - 1}` : ''} is typing<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>`
+        : '';
+    } catch (e) { /* typing table may not be migrated yet */ }
+  }, 2000);
+}
+
+// Delegated clicks inside the chat scroll area: receipt images, reaction
+// chips, the add-reaction button, and the emoji picker.
+async function onOrgChatClick(e, sessionId) {
+  const img = e.target.closest('.org-chat-img');
+  if (img) { openReceiptModal(img.dataset.full); return; }
+
+  const addBtn = e.target.closest('.chat-react-add');
+  if (addBtn) {
+    const mid = addBtn.dataset.mid;
+    orgChatOpenPicker = orgChatOpenPicker === mid ? null : mid;
+    paintOrganizerChat();
+    return;
+  }
+
+  const pick = e.target.closest('.chat-react-pick');
+  const chip = e.target.closest('.chat-react-chip');
+  const target = pick || chip;
+  if (target) {
+    const mid = target.dataset.mid;
+    const emoji = target.dataset.emoji;
+    const mine = (orgChatData.reactions[mid] || [])
+      .find(r => r.reactor_token === ORGANIZER_TOKEN)?.emoji;
+    orgChatOpenPicker = null;
+    try {
+      if (mine === emoji) await deleteOrganizerReaction(mid);
+      else await upsertOrganizerReaction(mid, emoji);
+    } catch (err) {
+      showToast('Reaction failed.', true);
+      console.error(err);
+    }
+    renderOrganizerChat(sessionId);
+  }
 }
 function closeOrganizerChat() {
   if (orgChatPoll) { clearInterval(orgChatPoll); orgChatPoll = null; }
+  if (orgTypingPoll) { clearInterval(orgTypingPoll); orgTypingPoll = null; }
   const ex = document.getElementById('org-chat-modal');
   if (ex) ex.remove();
 }
+let orgChatData = { msgs: [], reactions: {} };
+let orgChatOpenPicker = null; // message id whose emoji picker is open
+
 async function renderOrganizerChat(sessionId) {
   const el = document.getElementById('org-chat-scroll'); if (!el) return;
   let msgs;
   try { msgs = await fetchOpenPlayMessages(sessionId); } catch (e) { return; }
-  el.innerHTML = (msgs || []).map(m => {
+  let reactions = {};
+  try {
+    reactions = await fetchReactionsFor((msgs || []).map(m => m.id).filter(Boolean));
+  } catch (e) {
+    // Reactions table may not be migrated yet — chat still works without it.
+    console.error('Failed to load reactions', e);
+  }
+  orgChatData = { msgs: msgs || [], reactions };
+
+  // Viewing the chat marks its player messages as read for the chat head.
+  const maxPlayerId = Math.max(0, ...orgChatData.msgs
+    .filter(m => !m.is_organizer && m.id).map(m => m.id));
+  if (maxPlayerId > 0) {
+    markSessionSeen(sessionId, maxPlayerId);
+    if (chatHeadUnread[sessionId]) {
+      delete chatHeadUnread[sessionId];
+      renderChatHead();
+    }
+  }
+
+  paintOrganizerChat();
+}
+
+function reactionRowHTML(mid, reactions, myToken) {
+  const list = reactions[mid] || [];
+  const counts = {};
+  list.forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+  const mine = list.find(r => r.reactor_token === myToken)?.emoji;
+  const chips = Object.entries(counts).map(([emoji, n]) =>
+    `<button class="chat-react-chip${mine === emoji ? ' mine' : ''}" data-mid="${mid}" data-emoji="${emoji}">${emoji} ${n}</button>`
+  ).join('');
+  const picker = orgChatOpenPicker === String(mid)
+    ? `<div class="chat-react-picker">${REACTION_EMOJIS.map(e =>
+        `<button class="chat-react-pick${mine === e ? ' mine' : ''}" data-mid="${mid}" data-emoji="${e}">${e}</button>`
+      ).join('')}</div>`
+    : '';
+  return `<div class="chat-react-row">${chips}<button class="chat-react-add" data-mid="${mid}" title="React">🙂<span>+</span></button>${picker}</div>`;
+}
+
+function paintOrganizerChat() {
+  const el = document.getElementById('org-chat-scroll'); if (!el) return;
+  const { msgs, reactions } = orgChatData;
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  el.innerHTML = msgs.map(m => {
     const who = m.is_organizer ? 'Organizer' : (m.sender_name || 'Player');
     const align = m.is_organizer ? 'flex-end' : 'flex-start';
-    const img = m.image_url ? `<img src="${escHtml(m.image_url)}" style="max-width:180px;border-radius:8px;display:block;margin-top:4px;">` : '';
-    return `<div style="display:flex;flex-direction:column;align-items:${align};margin-bottom:8px;">
+    const img = m.image_url
+      ? `<img src="${escHtml(m.image_url)}" class="org-chat-img" data-full="${escHtml(m.image_url)}" style="max-width:180px;border-radius:8px;display:block;margin-top:4px;cursor:zoom-in;">`
+      : '';
+    return `<div class="org-chat-msg" style="display:flex;flex-direction:column;align-items:${align};margin-bottom:8px;">
       <div style="font-size:0.68rem;color:#888;">${escHtml(who)}</div>
       <div style="max-width:80%;background:${m.is_organizer ? '#e8f0fe' : '#f1f1f1'};border-radius:10px;padding:6px 10px;font-size:0.85rem;word-break:break-word;">${m.body ? escHtml(m.body) : ''}${img}</div>
+      ${m.id ? reactionRowHTML(m.id, reactions, ORGANIZER_TOKEN) : ''}
     </div>`;
   }).join('') || '<div style="text-align:center;color:#aaa;padding:1rem;">No messages yet.</div>';
-  el.scrollTop = el.scrollHeight;
+  if (nearBottom || !el.dataset.painted) el.scrollTop = el.scrollHeight;
+  el.dataset.painted = '1';
+}
+
+// ─── CHAT HEAD ───────────────────────────────────────────────────────────────
+// Floating bubble visible on every tab while at least one enabled Open Play
+// session is "live": its date has arrived and its real end moment hasn't
+// passed. Shows unread player-message counts (seen state kept per device).
+
+let chatHeadSessions = [];
+let chatHeadUnread = {};
+let chatHeadPoll = null;
+let chatHeadListOpen = false;
+
+function getSeenMap() {
+  try { return JSON.parse(localStorage.getItem('op_chat_seen') || '{}'); }
+  catch { return {}; }
+}
+
+function markSessionSeen(sessionId, maxMsgId) {
+  const m = getSeenMap();
+  if ((m[sessionId] || 0) < maxMsgId) {
+    m[sessionId] = maxMsgId;
+    localStorage.setItem('op_chat_seen', JSON.stringify(m));
+  }
+}
+
+async function refreshChatHead() {
+  try {
+    const sessions = await fetchAllOpenPlaySessions();
+    const now = new Date();
+    const today = todayStr();
+    chatHeadSessions = sessions.filter(s =>
+      s.is_enabled && s.date && s.date <= today && !isSessionPassed(s, now));
+
+    if (chatHeadSessions.length) {
+      const ids = chatHeadSessions.map(s => s.id);
+      const msgs = await sbFetch(
+        `open_play_messages?session_id=in.(${ids.join(',')})&is_organizer=eq.false&select=id,session_id`);
+      const seen = getSeenMap();
+      chatHeadUnread = {};
+      msgs.forEach(m => {
+        if (m.id > (seen[m.session_id] || 0)) {
+          chatHeadUnread[m.session_id] = (chatHeadUnread[m.session_id] || 0) + 1;
+        }
+      });
+    } else {
+      chatHeadUnread = {};
+      chatHeadListOpen = false;
+    }
+  } catch (e) {
+    console.error('Chat head refresh failed', e);
+  }
+  renderChatHead();
+}
+
+function renderChatHead() {
+  const head = document.getElementById('chat-head');
+  if (!head) return;
+  const loggedIn = document.getElementById('admin-app')?.classList.contains('visible');
+  if (!loggedIn || chatHeadSessions.length === 0) {
+    head.style.display = 'none';
+    return;
+  }
+  head.style.display = 'block';
+
+  const totalUnread = Object.values(chatHeadUnread).reduce((a, b) => a + b, 0);
+  const badge = document.getElementById('chat-head-badge');
+  badge.style.display = totalUnread > 0 ? 'flex' : 'none';
+  badge.textContent = totalUnread > 99 ? '99+' : totalUnread;
+  document.getElementById('chat-head-btn').classList.toggle('pulse', totalUnread > 0);
+
+  const list = document.getElementById('chat-head-list');
+  if (!chatHeadListOpen) { list.innerHTML = ''; list.style.display = 'none'; return; }
+  list.style.display = 'block';
+  list.innerHTML = `
+    <div class="chat-head-list-title">Live Open Play chats</div>
+    ${chatHeadSessions.map(s => {
+      const unread = chatHeadUnread[s.id] || 0;
+      return `<button class="chat-head-item" data-id="${s.id}">
+        <span class="chat-head-item-main">
+          <span class="chat-head-item-date">${fmtDateLabel(s.date)}</span>
+          <span class="chat-head-item-time">${fmt12(s.start_time)} – ${fmt12(s.end_time)}</span>
+        </span>
+        ${unread ? `<span class="chat-head-item-unread">${unread}</span>` : ''}
+      </button>`;
+    }).join('')}`;
+  list.querySelectorAll('.chat-head-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      chatHeadListOpen = false;
+      renderChatHead();
+      openOrganizerChat(btn.dataset.id);
+    });
+  });
+}
+
+function startChatHead() {
+  refreshChatHead();
+  if (!chatHeadPoll) chatHeadPoll = setInterval(refreshChatHead, 15000);
+}
+
+function stopChatHead() {
+  if (chatHeadPoll) { clearInterval(chatHeadPoll); chatHeadPoll = null; }
+  chatHeadSessions = [];
+  chatHeadUnread = {};
+  chatHeadListOpen = false;
+  renderChatHead();
 }
 
 // ─── COURTS MANAGEMENT ────────────────────────────────────────────────────────
@@ -2500,7 +2816,7 @@ function renderApp() {
       <div class="login-wrapper">
         <img src="/BMJ COURT PICKLEBALL - PRIMARY LOGO.png" alt="BMJ Court Pickleball" class="login-logo" />
       <div class="login-card">
-        <h1>Glan Pickleball<br>Community</h1>
+        <h1>Your Pickleball<br>Community</h1>
         <p>Admin Panel — Sign in to continue</p>
         <form id="login-form" autocomplete="off">
           <div class="input-group">
@@ -2546,7 +2862,7 @@ function renderApp() {
     <div id="admin-app">
       <header class="admin-header">
         <div class="header-brand">
-          Glan Pickleball Community
+          Your Pickleball Community
         </div>
         <div class="header-center">
           <img src="/BMJ COURT PICKLEBALL - PRIMARY LOGO.png" alt="BMJ Court Pickleball" class="header-logo" />
@@ -2616,7 +2932,7 @@ function renderApp() {
               <div class="stat-icon">💰</div>
               <div class="stat-label">Revenue Today</div>
               <div class="stat-value" id="stat-revenue">—</div>
-              <div class="stat-sub">Per court/hour</div>
+              <div class="stat-sub">Courts + open play</div>
             </div>
             <div id="court-stat-cards"></div>
           </div>
@@ -2689,23 +3005,29 @@ function renderApp() {
             <div class="revenue-meta">
               <span><strong id="revenue-bookings">0</strong> bookings</span>
               <span><strong id="revenue-hours">0h</strong> total hours</span>
+              <span><strong id="revenue-op-players">0</strong> open play players</span>
             </div>
           </div>
 
           <div class="section-title" style="margin-top:1.5rem">By Court</div>
           <div class="revenue-grid" id="revenue-court-cards"></div>
 
-          <div class="section-title" style="margin-top:1.5rem">By Payment Method</div>
-          <div class="revenue-grid two-col">
+          <div class="section-title" style="margin-top:1.5rem">Income Breakdown</div>
+          <div class="revenue-grid">
             <div class="revenue-card gcash-card">
-              <div class="rev-card-label">💳 QR Payment</div>
+              <div class="rev-card-label">💳 QR Payment (Courts)</div>
               <div class="rev-card-amount" id="rev-gcash-amount">₱0</div>
               <div class="rev-card-meta" id="rev-gcash-count">0 hours</div>
             </div>
             <div class="revenue-card cash-card">
-              <div class="rev-card-label">💵 Cash</div>
+              <div class="rev-card-label">💵 Cash (Courts)</div>
               <div class="rev-card-amount" id="rev-cash-amount">₱0</div>
               <div class="rev-card-meta" id="rev-cash-count">0 hours</div>
+            </div>
+            <div class="revenue-card openplay-card">
+              <div class="rev-card-label">🏃 Open Play</div>
+              <div class="rev-card-amount" id="rev-openplay-amount">₱0</div>
+              <div class="rev-card-meta" id="rev-openplay-count">0 players</div>
             </div>
           </div>
         </div><!-- /tab-revenue -->
@@ -3089,6 +3411,31 @@ function renderApp() {
       </div>
     </div>
 
+    <!-- Receipt / chat image viewer -->
+    <div class="modal-overlay" id="receipt-modal">
+      <div class="modal-card receipt-modal-card">
+        <div class="account-modal-header">
+          <h2>Receipt</h2>
+          <button class="modal-close" id="receipt-modal-close">&times;</button>
+        </div>
+        <div class="receipt-modal-body">
+          <div id="receipt-loading" class="loading-spinner" style="display:none"><div class="spinner"></div>Loading image…</div>
+          <div id="receipt-error" style="display:none;text-align:center;color:#c62828;padding:1rem;">Couldn't load the image.</div>
+          <img id="receipt-img" alt="Receipt" style="display:none" />
+        </div>
+        <a id="receipt-open-link" href="#" target="_blank" rel="noopener" class="receipt-open-link">Open full size in new tab ↗</a>
+      </div>
+    </div>
+
+    <!-- Floating Open Play chat head (only while a session is live) -->
+    <div id="chat-head" style="display:none">
+      <div id="chat-head-list" style="display:none"></div>
+      <button id="chat-head-btn" title="Open Play chat" aria-label="Open Play chat">
+        💬
+        <span id="chat-head-badge" class="chat-head-badge" style="display:none"></span>
+      </button>
+    </div>
+
     <!-- Toast container -->
     <div class="toast-container"></div>
   `;
@@ -3269,6 +3616,29 @@ function renderApp() {
   document.getElementById('btn-lock-all-time').addEventListener('click', () => {
     const allSelected = LOCK_TIME_SLOTS.every(s => selectedLockTimes.has(s));
     LOCK_TIME_SLOTS.forEach(s => toggleLockTime(s, !allSelected));
+  });
+
+  // Chat head: one live session opens its chat directly; several show the list.
+  document.getElementById('chat-head-btn').addEventListener('click', () => {
+    if (chatHeadSessions.length === 1) {
+      chatHeadListOpen = false;
+      renderChatHead();
+      openOrganizerChat(chatHeadSessions[0].id);
+    } else {
+      chatHeadListOpen = !chatHeadListOpen;
+      renderChatHead();
+    }
+  });
+
+  // Receipt / chat image viewer
+  document.getElementById('receipt-modal-close').addEventListener('click', closeReceiptModal);
+  document.getElementById('receipt-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeReceiptModal();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('receipt-modal').classList.contains('show')) {
+      closeReceiptModal();
+    }
   });
 
   // Delete lock modal

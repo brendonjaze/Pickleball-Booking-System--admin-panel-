@@ -1226,6 +1226,115 @@ tbody td {
 .revenue-card.court3 { border-left-color: #ec4899; }
 .revenue-card.gcash-card { border-left-color: #059669; }
 .revenue-card.cash-card  { border-left-color: #d97706; }
+.revenue-card.openplay-card { border-left-color: #7c3aed; }
+
+/* ─── Receipt / chat image viewer ─── */
+/* Opened from inside the Session Chat modal (also a .modal-overlay at
+   z-index 1000, appended to <body> after this one), so it needs a higher
+   z-index to stack in front of the chat. Toasts stay above at 9999. */
+#receipt-modal {
+  z-index: 1100;
+}
+
+.receipt-modal-card {
+  max-width: 480px;
+  width: 92%;
+}
+
+.receipt-modal-body {
+  max-height: 62vh;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #fafafa;
+  border: 1px solid var(--border-light);
+  min-height: 120px;
+}
+
+#receipt-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.receipt-open-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.receipt-open-link:hover { text-decoration: underline; }
+
+/* ─── Chat reactions ─── */
+.chat-react-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+  position: relative;
+}
+
+.chat-react-chip {
+  border: 1px solid var(--border-light);
+  background: #fff;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.chat-react-chip.mine {
+  border-color: var(--primary);
+  background: #e8f5e9;
+}
+
+.chat-react-add {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: #999;
+  padding: 1px 4px;
+  border-radius: 999px;
+  opacity: 0.65;
+}
+
+.chat-react-add:hover { opacity: 1; background: #f1f1f1; }
+.chat-react-add span { font-size: 0.7rem; font-weight: 700; }
+
+.chat-react-picker {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  gap: 2px;
+  background: #fff;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 4px 6px;
+  box-shadow: var(--shadow-md);
+  z-index: 5;
+}
+
+.chat-react-pick {
+  border: none;
+  background: none;
+  font-size: 1.15rem;
+  cursor: pointer;
+  border-radius: 50%;
+  padding: 2px 4px;
+  transition: transform 0.12s;
+}
+
+.chat-react-pick:hover { transform: scale(1.25); }
+.chat-react-pick.mine { background: #e8f5e9; }
 
 .rev-card-label {
   font-size: 0.68rem;
@@ -1250,6 +1359,7 @@ tbody td {
 .revenue-card.court3 .rev-card-amount { color: #be185d; }
 .revenue-card.gcash-card .rev-card-amount { color: #065f46; }
 .revenue-card.cash-card .rev-card-amount  { color: #92400e; }
+.revenue-card.openplay-card .rev-card-amount { color: #5b21b6; }
 
 .rev-card-meta {
   font-size: 0.7rem;
