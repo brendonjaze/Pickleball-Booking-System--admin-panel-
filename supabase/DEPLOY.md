@@ -2,17 +2,18 @@
 
 Three one-time steps, in order. Everything is idempotent (safe to re-run).
 
-## 1. Run the migration
+## 1. Run the migrations (two files)
 
-Supabase Dashboard → **SQL Editor** → paste the contents of
-`supabase/migrations/20260702_chat_reactions_revenue_log.sql` → **Run**.
+Supabase Dashboard → **SQL Editor** → paste each file's contents → **Run**:
 
-This creates:
-- `open_play_message_reactions` (emoji reactions, RLS + Realtime enabled)
-- `open_play_revenue_log` (revenue snapshots that survive the purge)
+1. `supabase/migrations/20260702_chat_reactions_revenue_log.sql`
+   - `open_play_message_reactions` (emoji reactions, RLS + Realtime enabled)
+   - `open_play_revenue_log` (revenue snapshots that survive the purge)
+2. `supabase/migrations/20260702b_typing_indicator.sql`
+   - `open_play_typing` (powers the "is typing…" indicator in both apps)
 
-Verify: **Database → Replication → supabase_realtime** should list
-`open_play_message_reactions`.
+Both are safe to re-run. Verify: **Database → Replication → supabase_realtime**
+should list `open_play_message_reactions` and `open_play_typing`.
 
 ## 2. Deploy the Edge Function
 
@@ -62,7 +63,9 @@ select cron.schedule(
 
 ## What the purge does (recap)
 
-Every hour, for each Open Play session whose end time (Asia/Manila) has passed:
+Every hour, for each Open Play session whose end time (Asia/Manila) has
+passed — **or that the admin manually deleted** (those purge on the next run,
+even before their scheduled time):
 1. Writes players × price into `open_play_revenue_log` (so the admin Revenue
    tab keeps counting it forever).
 2. Deletes the session's receipt images from the `openplay-receipts` bucket.

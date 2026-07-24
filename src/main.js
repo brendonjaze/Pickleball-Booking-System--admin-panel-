@@ -4,8 +4,8 @@ import './style.css';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const SESSION_KEY = 'glan_admin_token';
-const REFRESH_KEY = 'glan_admin_refresh';
+const SESSION_KEY = 'admin_token';
+const REFRESH_KEY = 'admin_refresh';
 let refreshInFlight = null; // de-dupes concurrent token refreshes
 
 let allCourts = []; // populated on load from Supabase
@@ -2851,9 +2851,8 @@ function renderApp() {
     <!-- Login -->
     <div id="login-screen" style="display:flex">
       <div class="login-wrapper">
-        <img src="/BMJ COURT PICKLEBALL - PRIMARY LOGO.png" alt="BMJ Court Pickleball" class="login-logo" />
       <div class="login-card">
-        <h1>Your Pickleball<br>Community</h1>
+        <h1>Your <span class="brand-script">Pickleball</span><br>Community</h1>
         <p>Admin Panel — Sign in to continue</p>
         <form id="login-form" autocomplete="off">
           <div class="input-group">
@@ -2899,10 +2898,7 @@ function renderApp() {
     <div id="admin-app">
       <header class="admin-header">
         <div class="header-brand">
-          Your Pickleball Community
-        </div>
-        <div class="header-center">
-          <img src="/BMJ COURT PICKLEBALL - PRIMARY LOGO.png" alt="BMJ Court Pickleball" class="header-logo" />
+          Your <span class="brand-script">Pickleball</span> Community
         </div>
         <div class="header-right">
           <span class="header-badge">Admin</span>

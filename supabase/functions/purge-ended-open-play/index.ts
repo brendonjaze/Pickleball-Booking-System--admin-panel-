@@ -1,7 +1,8 @@
 // purge-ended-open-play
 //
 // Runs hourly (Supabase Cron). For every Open Play session whose real end
-// moment (Asia/Manila) has passed, it:
+// moment (Asia/Manila) has passed — or that the admin manually deleted
+// (deleted_at set), which counts as ended immediately — it:
 //   1. snapshots revenue (players × price_per_player) into open_play_revenue_log
 //   2. deletes the session's receipt images from the openplay-receipts bucket
 //   3. deletes its chat messages (reactions cascade), join requests,
@@ -127,11 +128,15 @@ async function purgeSession(
   // 3) Rows, children first. Reactions cascade from messages.
   for (const table of [
     "open_play_messages",
+    "open_play_typing",
     "open_play_join_requests",
     "open_play_queue",
   ]) {
     const { error } = await supabase.from(table).delete().eq("session_id", s.id);
-    if (error) throw new Error(`delete ${table}: ${error.message}`);
+    // Tolerate a missing open_play_typing table (its migration is separate).
+    if (error && !(table === "open_play_typing" && /find the table/i.test(error.message))) {
+      throw new Error(`delete ${table}: ${error.message}`);
+    }
   }
   const { error: sessErr } = await supabase
     .from("open_play_sessions")
@@ -145,12 +150,14 @@ Deno.serve(async () => {
 
   const { data: sessions, error } = await supabase
     .from("open_play_sessions")
-    .select("id,date,start_time,end_time,price_per_player");
+    .select("id,date,start_time,end_time,price_per_player,deleted_at");
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  const ended = (sessions ?? []).filter((s) => isEnded(s, now));
+  // Manually deleted sessions (deleted_at set) purge on the next run, even
+  // days before their scheduled time; everything else waits for its real end.
+  const ended = (sessions ?? []).filter((s) => s.deleted_at || isEnded(s, now));
   let purged = 0;
   const errors: string[] = [];
 

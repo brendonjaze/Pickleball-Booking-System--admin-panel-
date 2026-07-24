@@ -5,20 +5,35 @@
 }
 
 :root {
-  --bg: #f0fbfd;
-  --bg-subtle: #e0f9fc;
-  --primary: #0e7490;
-  --primary-dark: #083344;
-  --primary-light: #0891b2;
+  /* Shared brand tokens — mirror the user-facing app's palette */
+  --cream: #f0fbfd;
+  --green-dark: #0e7490;
+  --green-medium: #0891b2;
+  --green-light: #cffafe;
+  --hero-teal: #07333f;
+  --hero-teal-mid: #0b4f62;
+  --heading-cream: #fdf8ee;
+  --lime: #e8f960;
+  --accent-gradient: linear-gradient(90deg, #e8f960, #0891b2);
+  --font-serif: 'Playfair Display', serif;
+  --font-script: 'Dancing Script', cursive;
+  --font-sans: 'Montserrat', sans-serif;
+
+  /* Semantic aliases used throughout this stylesheet */
+  --bg: var(--cream);
+  --bg-subtle: var(--green-light);
+  --primary: var(--green-dark);
+  --primary-dark: var(--hero-teal);
+  --primary-light: var(--green-medium);
   --primary-ghost: rgba(14, 116, 144, 0.06);
-  --accent: #cffafe;
+  --accent: var(--green-light);
   --danger: #c0392b;
   --danger-light: #fdecea;
   --text: #1a1a1a;
   --text-secondary: #4b5563;
   --text-muted: #6b7280;
-  --border: #a5f3fc;
-  --border-light: #cffafe;
+  --border: #e0e0e0;
+  --border-light: #e0e0e0;
   --white: #ffffff;
   --shadow-xs: 0 1px 3px rgba(14, 116, 144, 0.06);
   --shadow: 0 2px 8px rgba(14, 116, 144, 0.1);
@@ -106,7 +121,7 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: linear-gradient(135deg, #083344, #0e7490, #0891b2, #0e7490, #083344);
+  background: linear-gradient(160deg, var(--hero-teal), var(--hero-teal-mid), var(--hero-teal));
   background-size: 300% 300%;
   animation: gradientShift 12s ease infinite;
 }
@@ -117,16 +132,6 @@ html, body {
   align-items: center;
   width: 100%;
   max-width: 400px;
-}
-
-.login-logo {
-  height: 110px;
-  width: auto;
-  object-fit: contain;
-  margin-bottom: -16px;
-  position: relative;
-  z-index: 0;
-  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.25));
 }
 
 .login-card {
@@ -309,21 +314,6 @@ html, body {
   font-weight: 800;
   font-size: 1rem;
   letter-spacing: -0.01em;
-}
-
-.header-center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-}
-
-.header-logo {
-  height: 48px;
-  width: auto;
-  object-fit: contain;
-  display: block;
 }
 
 .header-brand .brand-icon {
@@ -723,7 +713,7 @@ html, body {
 }
 
 .btn-export:hover {
-  background: var(--primary-dark, #3a5bbf);
+  background: var(--green-medium);
 }
 
 /* ─── TABLE ────────────────────────────────────────────── */
@@ -1292,7 +1282,7 @@ tbody td {
 
 .chat-react-chip.mine {
   border-color: var(--primary);
-  background: #e8f5e9;
+  background: var(--green-light);
 }
 
 .chat-react-add {
@@ -1334,7 +1324,135 @@ tbody td {
 }
 
 .chat-react-pick:hover { transform: scale(1.25); }
-.chat-react-pick.mine { background: #e8f5e9; }
+.chat-react-pick.mine { background: var(--green-light); }
+
+/* ─── Typing indicator ─── */
+.chat-typing {
+  min-height: 18px;
+  font-size: 0.72rem;
+  color: #888;
+  padding: 2px 4px;
+}
+
+.typing-dots span {
+  animation: typingBlink 1.2s infinite;
+  font-weight: 700;
+}
+
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBlink {
+  0%, 60%, 100% { opacity: 0.25; }
+  30% { opacity: 1; }
+}
+
+/* ─── Floating chat head ─── */
+#chat-head {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 900; /* under modal overlays (1000) so open dialogs cover it */
+}
+
+#chat-head-btn {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: transform var(--transition);
+}
+
+#chat-head-btn:hover { transform: scale(1.08); }
+
+#chat-head-btn.pulse {
+  animation: chatHeadPulse 1.6s infinite;
+}
+
+@keyframes chatHeadPulse {
+  0% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(8, 145, 178, 0.45); }
+  70% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 0 0 14px rgba(8, 145, 178, 0); }
+  100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(8, 145, 178, 0); }
+}
+
+.chat-head-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e53935;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+}
+
+#chat-head-list {
+  position: absolute;
+  bottom: 68px;
+  right: 0;
+  width: 240px;
+  background: var(--white);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-md);
+  padding: 0.5rem;
+}
+
+.chat-head-list-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0.25rem 0.4rem 0.4rem;
+}
+
+.chat-head-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0.5rem 0.4rem;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-head-item:hover { background: var(--cream); }
+
+.chat-head-item-main { display: flex; flex-direction: column; gap: 1px; }
+.chat-head-item-date { font-size: 0.8rem; font-weight: 700; color: var(--text); }
+.chat-head-item-time { font-size: 0.72rem; color: var(--text-muted); }
+
+.chat-head-item-unread {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e53935;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .rev-card-label {
   font-size: 0.68rem;
@@ -2632,10 +2750,6 @@ tbody td {
   .login-wrapper {
     max-width: 360px;
   }
-
-  .login-logo {
-    height: 90px;
-  }
 }
 
 /* ── 375px: iPhone SE / small phones ───────────────────── */
@@ -2733,11 +2847,6 @@ tbody td {
     border-radius: 16px;
   }
 
-  .login-logo {
-    height: 80px;
-    margin-bottom: -14px;
-  }
-
   .login-card h1 { font-size: 1.1rem; }
   .login-card p { font-size: 0.75rem; }
 
@@ -2811,11 +2920,6 @@ tbody td {
   .login-card {
     padding: 1.25rem 0.875rem 1rem;
     border-radius: 14px;
-  }
-
-  .login-logo {
-    height: 70px;
-    margin-bottom: -12px;
   }
 
   .login-card h1 { font-size: 1rem; }
@@ -2935,7 +3039,7 @@ tbody td {
 .court-item-name {
   font-weight: 700;
   font-size: 1rem;
-  color: #1e5c45;
+  color: var(--green-dark);
 }
 
 .court-item-meta {
@@ -2967,8 +3071,8 @@ tbody td {
 
 .btn-activate {
   background: #fff;
-  color: #1e5c45;
-  border: 1.5px solid #1e5c45;
+  color: var(--green-dark);
+  border: 1.5px solid var(--green-dark);
   padding: 0.35rem 0.9rem;
   border-radius: 6px;
   font-size: 0.85rem;
@@ -2978,7 +3082,7 @@ tbody td {
 }
 
 .btn-activate:hover {
-  background: #eaf5ef;
+  background: var(--green-light);
 }
 
 @media (max-width: 600px) {
@@ -3196,7 +3300,7 @@ tbody td {
 
 .op-session-new {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.15);
+  box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.15);
 }
 
 /* ─── Open Play: collapsed list row ─────────────────────────── */
@@ -3370,8 +3474,8 @@ tbody td {
 .op-spots-left {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #27ae60;
-  background: #eaf5ef;
+  color: var(--green-dark);
+  background: var(--green-light);
   padding: 0.2rem 0.65rem;
   border-radius: 20px;
 }
@@ -3759,4 +3863,109 @@ tbody td {
     width: 100%;
     justify-content: center;
   }
+}
+
+/* ─── EDITORIAL BRAND THEME (matches the user-facing app) ─
+   Dark hero teal + warm cream + lime is reserved for chrome
+   (header, section headers, primary actions); data areas stay
+   on cream/white surfaces with dark text for legibility. */
+
+/* Serif display headings */
+.login-card h1,
+.section-title,
+.greeting,
+.modal-card h2,
+.account-modal-header h2,
+.edit-court-modal-header h2,
+.lock-month-modal-header h2 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* Script accent — small brand flourishes only */
+.brand-script {
+  font-family: var(--font-script);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Login: deep hero teal backdrop (set in the base #login-screen rule),
+   card stays white for the form */
+.login-card h1 {
+  color: var(--hero-teal);
+}
+
+.login-card h1 .brand-script {
+  color: var(--green-medium);
+  font-size: 1.3em;
+}
+
+/* Top bar: hero teal with cream serif brand + lime script accent,
+   finished with the accent gradient strip along the bottom edge */
+.admin-header {
+  background: var(--hero-teal);
+  color: var(--heading-cream);
+}
+
+.admin-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--accent-gradient);
+}
+
+.header-brand {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  color: var(--heading-cream);
+}
+
+.header-brand .brand-script {
+  color: var(--lime);
+  font-size: 1.45em;
+}
+
+.header-badge {
+  background: rgba(232, 249, 96, 0.08);
+  border-color: rgba(232, 249, 96, 0.35);
+  color: var(--lime);
+}
+
+/* Section headers: dark teal band, cream serif heading, lime edge */
+.section-title {
+  background: var(--hero-teal);
+  color: var(--heading-cream);
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius-xs);
+  border-left: 4px solid var(--lime);
+}
+
+.greeting {
+  color: var(--hero-teal);
+}
+
+/* Active tab carries the accent gradient */
+.tab-btn.active::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  height: 3px;
+  background: var(--accent-gradient);
+  border-radius: 6px 6px 0 0;
+}
+
+/* Primary actions: green-dark base, green-medium hover */
+.btn-primary:hover {
+  background: var(--green-medium);
+}
+
+.btn-export:hover,
+.btn-lock-month:hover {
+  background: var(--green-medium);
 }

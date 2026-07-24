@@ -91,6 +91,7 @@
 **"Ended" definition (mirrors admin `isSessionPassed`, evaluated in `Asia/Manila` time):**
 - `end_time` present: session ends at `date + end_time`, **+1 day when `end_time <= start_time`** (crosses midnight).
 - No `end_time`: ends at `date + 1 day, 00:00`.
+- **Manually deleted** (`deleted_at` set by the admin): counts as ended immediately — purged on the next hourly run regardless of schedule.
 - The function computes "now" in Asia/Manila regardless of server TZ.
 
 **Per ended session, in order (idempotent):**
@@ -113,6 +114,29 @@
 1. Run `supabase/migrations/20260702_chat_reactions_revenue_log.sql` in the SQL editor.
 2. Confirm the reactions table is in the Realtime publication (migration does it; verify in dashboard).
 3. Deploy `supabase/functions/purge-ended-open-play/` (`supabase functions deploy purge-ended-open-play`) and schedule it hourly (Dashboard → Integrations → Cron, or provided `cron.schedule` SQL fallback).
+
+## Addendum (same day) — Typing indicator + admin chat head
+
+**Typing indicator (both directions).** New `open_play_typing` table
+(`session_id uuid`, `actor_token`, `actor_name`, `is_organizer`, `updated_at`;
+PK `(session_id, actor_token)`; permissive RLS; in the Realtime publication;
+separate migration `20260702b_typing_indicator.sql`). Writers upsert their row
+at most every 2 s while typing; a client shows "… is typing" when the other
+party's row is fresher than 4 s. The admin stays SDK-free: it polls the table
+every 2 s while its chat modal is open; the booking app receives organizer
+signals via Realtime. Rows are purged with the session (Edge Function
+tolerates the table not existing yet).
+
+**Admin chat head.** Floating bubble (bottom-right, z-index 900 — under
+modals) visible on every tab while ≥1 enabled session is *live*: `date` has
+arrived (`date <= today`) and `isSessionPassed()` is false — i.e. from
+midnight of the session day until its real end, covering pre-session chatter.
+One head; clicking it opens the chat directly when a single session is live,
+or a session-list popover (each row: date, time range, unread count) when
+several are. Unread badge = player messages with `id` greater than the
+per-session last-seen id stored in `localStorage` (`op_chat_seen`); viewing a
+chat marks it read. Refreshes every 15 s and pulses when unread > 0. Appears
+only while signed in; cleared on logout.
 
 ## Risks / notes
 
