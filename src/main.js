@@ -647,14 +647,27 @@ async function deleteOpenPlayRegistration(regId) {
 // function just before a finished session (and its registrations) is deleted.
 async function fetchOpenPlayRevenueData() {
   const [sessions, queueRows, log] = await Promise.all([
-    sbFetch('open_play_sessions?select=id,date,price_per_player'),
-    sbFetch('open_play_queue?select=session_id'),
+    // Exclude soft-deleted sessions — their players must not count toward revenue
+    // for a session the admin can no longer see or manage.
+    sbFetch('open_play_sessions?select=id,date,price_per_player&deleted_at=is.null'),
+    sbFetch('open_play_queue?select=session_id,amount_paid'),
     // Table may not be migrated yet — degrade to live-only.
     sbFetch('open_play_revenue_log?select=session_id,date,players,total').catch(() => []),
   ]);
-  const counts = {};
-  queueRows.forEach(r => { counts[r.session_id] = (counts[r.session_id] || 0) + 1; });
-  return { sessions, counts, log };
+  // Prefer the amount actually paid per registration (snapshotted at payment
+  // time); fall back to the session's current price only for legacy rows that
+  // predate the amount_paid column, so editing a price never rewrites history.
+  const counts = {}, paidBySession = {}, unpricedBySession = {};
+  queueRows.forEach(r => {
+    counts[r.session_id] = (counts[r.session_id] || 0) + 1;
+    const amt = Number(r.amount_paid);
+    if (Number.isFinite(amt) && amt > 0) {
+      paidBySession[r.session_id] = (paidBySession[r.session_id] || 0) + amt;
+    } else {
+      unpricedBySession[r.session_id] = (unpricedBySession[r.session_id] || 0) + 1;
+    }
+  });
+  return { sessions, counts, paidBySession, unpricedBySession, log };
 }
 
 // Returns { [sessionId]: count } for the given session ids in one request.
@@ -791,8 +804,13 @@ function courtsForBreakdown(rows) {
 // EVENING_START_HOUR / 6 PM), and to the court's flat price_per_hour if pricing
 // settings haven't loaded or the rate is invalid.
 function rateForBooking(b) {
-  const stored = Number(b.price);
-  if (Number.isFinite(stored) && stored > 0) return stored;
+  // Use the stored price verbatim whenever one was recorded — including a
+  // genuine ₱0 booking. Only a truly absent price (legacy rows) falls back to
+  // re-deriving a rate; treating 0 as "missing" would show phantom revenue.
+  if (b.price !== null && b.price !== undefined && b.price !== '') {
+    const stored = Number(b.price);
+    if (Number.isFinite(stored) && stored >= 0) return stored;
+  }
   const court = allCourts.find(c => c.id === b.court_id);
   const fallback = court ? court.price_per_hour : 100;
   if (!pricingSettings) return fallback;
@@ -808,14 +826,17 @@ function rateForBooking(b) {
 // (the log row is written as the session is deleted), but skip any overlap
 // defensively so nothing double-counts mid-purge.
 function openPlayRevenue(prefix) {
-  const { sessions, counts, log } = openPlayRevenueData;
+  const { sessions, counts, paidBySession, unpricedBySession, log } = openPlayRevenueData;
   let total = 0, players = 0;
   const liveIds = new Set();
   for (const s of sessions) {
     liveIds.add(s.id);
     if (!s.date || !s.date.startsWith(prefix)) continue;
     const n = counts[s.id] || 0;
-    total += n * (Number(s.price_per_player) || 0);
+    // Snapshotted amounts + session-price fallback for legacy (unpriced) rows.
+    const stored = (paidBySession && paidBySession[s.id]) || 0;
+    const unpriced = (unpricedBySession && unpricedBySession[s.id]) || 0;
+    total += stored + unpriced * (Number(s.price_per_player) || 0);
     players += n;
   }
   for (const row of log || []) {
@@ -1089,7 +1110,10 @@ function openReceiptModal(url) {
   img.style.display = 'none';
   error.style.display = 'none';
   loading.style.display = 'flex';
-  link.href = url;
+  // Only allow http(s) image URLs as the "open full size" link — a player-supplied
+  // image_url of `javascript:…` would otherwise run in the admin's browser on click.
+  const safeUrl = /^https?:\/\//i.test(url) ? url : '';
+  link.href = safeUrl || '#';
 
   modal.classList.add('show');
 
@@ -1101,7 +1125,7 @@ function openReceiptModal(url) {
     loading.style.display = 'none';
     error.style.display = 'block';
   };
-  img.src = url;
+  img.src = safeUrl;
 }
 
 function closeReceiptModal() {
@@ -1214,6 +1238,11 @@ function logout() {
   signOut();
   stopChatHead();
   closeOrganizerChat();
+  // Clear any per-row Open Play polling intervals — the admin app is only hidden
+  // (DOM persists), so these would keep firing sbFetch after sign-out.
+  document.querySelectorAll('.op-expanded').forEach(row => {
+    if (row._opPoll) { clearInterval(row._opPoll); row._opPoll = null; }
+  });
   document.getElementById('admin-app').classList.remove('visible');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-email').value = '';
@@ -1487,9 +1516,14 @@ function attachCalendarDragEvents() {
     }, { passive: false });
   });
 
-  const stopDrag = () => { isDraggingDates = false; };
-  document.addEventListener('mouseup', stopDrag);
-  document.addEventListener('touchend', stopDrag);
+  // Bind the document-level drag terminators ONCE (they only flip a
+  // module-level flag), not on every re-render — otherwise navigating months
+  // accumulates duplicate handlers.
+  if (!attachCalendarDragEvents._docBound) {
+    document.addEventListener('mouseup', () => { isDraggingDates = false; });
+    document.addEventListener('touchend', () => { isDraggingDates = false; });
+    attachCalendarDragEvents._docBound = true;
+  }
 
   container.addEventListener('touchmove', e => {
     if (!isDraggingDates) return;
@@ -1570,9 +1604,12 @@ function attachTimeDragEvents() {
     }, { passive: false });
   });
 
-  const stopDrag = () => { isDraggingTimes = false; };
-  document.addEventListener('mouseup', stopDrag);
-  document.addEventListener('touchend', stopDrag);
+  // Bind once (see attachCalendarDragEvents) to avoid handler accumulation.
+  if (!attachTimeDragEvents._docBound) {
+    document.addEventListener('mouseup', () => { isDraggingTimes = false; });
+    document.addEventListener('touchend', () => { isDraggingTimes = false; });
+    attachTimeDragEvents._docBound = true;
+  }
 
   container.addEventListener('touchmove', e => {
     if (!isDraggingTimes) return;
@@ -2448,7 +2485,7 @@ function reactionRowHTML(mid, reactions, myToken) {
   list.forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
   const mine = list.find(r => r.reactor_token === myToken)?.emoji;
   const chips = Object.entries(counts).map(([emoji, n]) =>
-    `<button class="chat-react-chip${mine === emoji ? ' mine' : ''}" data-mid="${mid}" data-emoji="${emoji}">${emoji} ${n}</button>`
+    `<button class="chat-react-chip${mine === emoji ? ' mine' : ''}" data-mid="${mid}" data-emoji="${escHtml(emoji)}">${escHtml(emoji)} ${n}</button>`
   ).join('');
   const picker = orgChatOpenPicker === String(mid)
     ? `<div class="chat-react-picker">${REACTION_EMOJIS.map(e =>
