@@ -2212,6 +2212,12 @@ tbody td {
   pointer-events: none;
 }
 
+.op-cal-past {
+  color: var(--text-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .op-cal-count {
   font-size: 0.75rem;
   font-weight: 600;
@@ -2502,25 +2508,44 @@ tbody td {
     margin-bottom: 0.35rem;
   }
 
-  /* Tabs */
+  /* Tabs: icon-over-label grid — all 7 visible at once, no hidden scroll */
   .tab-nav {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    overflow-x: visible;
     margin-bottom: 1.25rem;
   }
 
   .tab-btn {
-    padding: 0.7rem 0.9rem;
-    font-size: 0.78rem;
-    gap: 0.3rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0.45rem 0.15rem;
+    font-size: 0.56rem;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .tab-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .tab-icon {
-    font-size: 0.85rem;
+    font-size: 1rem;
   }
 
   .tab-badge {
-    font-size: 0.55rem;
-    padding: 0.1rem 0.35rem;
-    min-width: 1.1rem;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.5rem;
+    padding: 0.08rem 0.28rem;
+    min-width: 1rem;
   }
 
   /* Filters */
@@ -2730,11 +2755,11 @@ tbody td {
 
   /* Tabs */
   .tab-btn {
-    padding: 0.65rem 0.8rem;
-    font-size: 0.76rem;
+    padding: 0.4rem 0.1rem;
+    font-size: 0.54rem;
   }
 
-  .tab-icon { font-size: 0.82rem; }
+  .tab-icon { font-size: 0.95rem; }
 
   /* Lock time grid stays 2-col but slimmer */
   .lock-time-slot { font-size: 0.68rem; padding: 0.5rem 0.35rem; }
@@ -2783,16 +2808,16 @@ tbody td {
 
   /* Tabs */
   .tab-btn {
-    padding: 0.6rem 0.7rem;
-    font-size: 0.72rem;
-    gap: 0.25rem;
+    padding: 0.35rem 0.05rem;
+    font-size: 0.5rem;
+    gap: 2px;
   }
 
-  .tab-icon { font-size: 0.75rem; }
+  .tab-icon { font-size: 0.9rem; }
 
   .tab-badge {
-    font-size: 0.5rem;
-    padding: 0.08rem 0.3rem;
+    font-size: 0.46rem;
+    padding: 0.06rem 0.24rem;
   }
 
   /* Calendar */
@@ -2883,11 +2908,11 @@ tbody td {
 
   /* Tabs */
   .tab-btn {
-    padding: 0.55rem 0.65rem;
-    font-size: 0.68rem;
+    padding: 0.3rem 0.05rem;
+    font-size: 0.46rem;
   }
 
-  .tab-icon { font-size: 0.7rem; }
+  .tab-icon { font-size: 0.85rem; }
 
   /* Calendar */
   .lock-cal-day { padding: 0.28rem 0; font-size: 0.62rem; }
@@ -3826,6 +3851,10 @@ tbody td {
   opacity: 0.55;
 }
 
+.lock-month-btn:disabled {
+  cursor: not-allowed;
+}
+
 .lock-month-name {
   font-size: 0.82rem;
   font-weight: 700;
@@ -3968,4 +3997,182 @@ tbody td {
 .btn-export:hover,
 .btn-lock-month:hover {
   background: var(--green-medium);
+}
+
+/* ─── UI/UX ADDITIONS ────────────────────────────────────── */
+
+/* Quick date filter chips (Bookings tab) */
+.filter-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-preset-chip {
+  border: 1.5px solid var(--border-light);
+  background: var(--white);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.filter-preset-chip:hover {
+  border-color: var(--green-dark);
+  color: var(--green-dark);
+}
+
+.filter-preset-chip.active {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+  color: var(--white);
+}
+
+/* Chat day divider */
+.chat-day-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 8px;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.chat-day-divider::before,
+.chat-day-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Revenue daily trend (pure-CSS bar chart) */
+.rev-trend-toggle {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.rev-trend-btn {
+  background: transparent;
+  border: 1px solid rgba(253, 248, 238, 0.4);
+  color: var(--heading-cream);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.rev-trend-btn.active {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--hero-teal);
+}
+
+.rev-trend-card {
+  background: var(--white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  padding: 1rem 1.25rem 0.75rem;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.rev-trend-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.rev-trend-card.dense { gap: 3px; }
+.rev-trend-card.dense .rev-trend-amt { display: none; }
+.rev-trend-card.dense .rev-trend-col { min-width: 10px; }
+
+.rev-trend-amt {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.rev-trend-bar {
+  width: 100%;
+  max-width: 34px;
+  background: var(--green-medium);
+  border-radius: 4px 4px 0 0;
+}
+
+.rev-trend-bar.today {
+  background: var(--green-dark);
+}
+
+.rev-trend-day {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Skeleton loading placeholders */
+@keyframes shimmer {
+  from { background-position: -400px 0; }
+  to   { background-position: 400px 0; }
+}
+
+.skeleton,
+.op-skeleton {
+  background: linear-gradient(90deg, #e8e8e8 25%, #f4f4f4 50%, #e8e8e8 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+.skeleton {
+  display: inline-block;
+  height: 12px;
+  width: 80%;
+  border-radius: 6px;
+}
+
+.op-skeleton {
+  height: 64px;
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+}
+
+/* Bulk delete acknowledgement */
+.bulk-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+  cursor: pointer;
+}
+
+.bulk-ack input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  flex-shrink: 0;
+  accent-color: var(--danger);
+  cursor: pointer;
 }

@@ -6,6 +6,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const SESSION_KEY = 'admin_token';
 const REFRESH_KEY = 'admin_refresh';
+const BASE_TITLE = document.title; // restored when chat unread count is zero
 let refreshInFlight = null; // de-dupes concurrent token refreshes
 
 let allCourts = []; // populated on load from Supabase
@@ -347,7 +348,7 @@ function renderSelectToolbar() {
 function bulkDeleteSelected() {
   if (opSelectedIds.size === 0) return;
   const ids = [...opSelectedIds];
-  confirmDeleteSession(async () => {
+  const run = async () => {
     try {
       await Promise.all(ids.map(id => softDeleteOpenPlaySession(id)));
       exitSelectMode();
@@ -356,7 +357,38 @@ function bulkDeleteSelected() {
     } catch (e) {
       showToast('Failed to delete sessions.', true);
     }
-  });
+  };
+  // Deleting several sessions at once destroys that much more data — require
+  // an explicit acknowledgement instead of a single tap.
+  if (ids.length === 1) confirmDeleteSession(run);
+  else confirmBulkDelete(ids.length, run);
+}
+
+function confirmBulkDelete(count, onConfirm) {
+  const modal = document.getElementById('op-bulk-delete-modal');
+  document.getElementById('op-bulk-delete-summary').textContent =
+    `You are about to delete ${count} sessions. Their chats, receipt images, and player registrations are erased from the database within the hour. Revenue already collected stays counted.`;
+  const ack = document.getElementById('op-bulk-delete-ack');
+  const confirmBtn = document.getElementById('op-bulk-delete-confirm');
+  const cancelBtn = document.getElementById('op-bulk-delete-cancel');
+  ack.checked = false;
+  confirmBtn.disabled = true;
+  modal.classList.add('show');
+
+  function onAck() { confirmBtn.disabled = !ack.checked; }
+  function onBackdrop(e) { if (e.target === modal) close(); }
+  function close() {
+    modal.classList.remove('show');
+    modal.removeEventListener('click', onBackdrop);
+    ack.removeEventListener('change', onAck);
+    confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+  }
+
+  ack.addEventListener('change', onAck);
+  confirmBtn.addEventListener('click', () => { close(); onConfirm(); });
+  cancelBtn.addEventListener('click', close);
+  modal.addEventListener('click', onBackdrop);
 }
 
 // ─── ADD SCHEDULE MODAL ──────────────────────────────────────────────────────
@@ -408,8 +440,15 @@ function renderOpModalCalendar() {
     html += `<div class="op-cal-cell op-cal-empty"></div>`;
   }
 
+  const today = todayStr();
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    // Past dates are unselectable — a session dated yesterday would be
+    // auto-soft-deleted (and purged) the moment the list reloads.
+    if (dateStr < today) {
+      html += `<div class="op-cal-cell op-cal-past">${d}</div>`;
+      continue;
+    }
     const sel = opModalSelectedDates.has(dateStr) ? ' selected' : '';
     html += `<div class="op-cal-cell op-cal-day${sel}" data-date="${dateStr}">${d}</div>`;
   }
@@ -647,9 +686,10 @@ async function deleteOpenPlayRegistration(regId) {
 // function just before a finished session (and its registrations) is deleted.
 async function fetchOpenPlayRevenueData() {
   const [sessions, queueRows, log] = await Promise.all([
-    // Exclude soft-deleted sessions — their players must not count toward revenue
-    // for a session the admin can no longer see or manage.
-    sbFetch('open_play_sessions?select=id,date,price_per_player&deleted_at=is.null'),
+    // Soft-deleted sessions still count: their players already paid, and the
+    // purge snapshots the same amount into the revenue log before erasing
+    // them — counting them live keeps totals steady across delete → purge.
+    sbFetch('open_play_sessions?select=id,date,price_per_player'),
     sbFetch('open_play_queue?select=session_id,amount_paid'),
     // Table may not be migrated yet — degrade to live-only.
     sbFetch('open_play_revenue_log?select=session_id,date,players,total').catch(() => []),
@@ -723,6 +763,9 @@ let openPlayRevenueData = { sessions: [], counts: {}, log: [] }; // live session
 let pricingSettings = null; // time-based rates ({ daytime_rate, evening_rate, cutoff_hour })
 let pendingDeleteRef = null;
 let currentRevenuePeriod = 'monthly';
+let revTrendDays = 7;           // Daily Trend chart window (7 or 30 days)
+let filterPreset = null;        // quick date filter: 'today' | 'tomorrow' | 'week'
+let bookingsAutoRefresh = null; // 60s background reload while signed in
 let lastUpdatedTime = null;
 let allCourtLocks = [];
 let lockCalendarDate = new Date();
@@ -950,6 +993,43 @@ function updateRevenue() {
   document.getElementById('rev-cash-count').textContent = `${cashBookings.length} hours`;
   document.getElementById('rev-openplay-amount').textContent = `₱${op.total.toLocaleString()}`;
   document.getElementById('rev-openplay-count').textContent = `${op.players} player${op.players !== 1 ? 's' : ''}`;
+
+  renderRevenueTrend();
+}
+
+// Pure-CSS daily revenue bars for the last 7 or 30 days (courts + open play).
+function renderRevenueTrend() {
+  const el = document.getElementById('rev-trend-chart');
+  if (!el) return;
+
+  const days = [];
+  for (let i = revTrendDays - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dayStr = d.toLocaleDateString('en-CA');
+    const total = allBookings
+      .filter(b => b.date === dayStr)
+      .reduce((sum, b) => sum + rateForBooking(b), 0)
+      + openPlayRevenue(dayStr).total;
+    days.push({ dayStr, d, total });
+  }
+
+  const max = Math.max(1, ...days.map(x => x.total));
+  const short = v => (v >= 1000 ? `₱${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `₱${v}`);
+  const today = todayStr();
+
+  el.classList.toggle('dense', revTrendDays === 30);
+  el.innerHTML = days.map(x => {
+    const h = Math.max(3, Math.round((x.total / max) * 72));
+    const label = revTrendDays === 7
+      ? x.d.toLocaleDateString('en-US', { weekday: 'short' })
+      : String(x.d.getDate());
+    return `<div class="rev-trend-col" title="${fmtDateLabel(x.dayStr)}: ₱${x.total.toLocaleString()}">
+      <span class="rev-trend-amt">${x.total ? short(x.total) : ''}</span>
+      <span class="rev-trend-bar${x.dayStr === today ? ' today' : ''}" style="height:${h}px"></span>
+      <span class="rev-trend-day">${label}</span>
+    </div>`;
+  }).join('');
 }
 
 // ─── TABLE ────────────────────────────────────────────────────────────────────
@@ -1011,8 +1091,8 @@ function renderTable(grouped) {
 
   tbody.innerHTML = grouped.map(b => `
     <tr>
-      <td data-label="Name">${b.name || '—'}</td>
-      <td data-label="Phone">${b.phone}</td>
+      <td data-label="Name">${escHtml(b.name) || '—'}</td>
+      <td data-label="Phone">${escHtml(b.phone) || '—'}</td>
       <td data-label="Court">${courtBadge(b.court_id)}</td>
       <td data-label="Date">${renderDateCell(b.date)}</td>
       <td data-label="Time">${b.time_range}</td>
@@ -1039,10 +1119,23 @@ function applyFilters() {
   const showPast = document.getElementById('filter-show-past').checked;
   const today = todayStr();
 
+  // Quick-filter chips (Today / Tomorrow / This Week) — mutually exclusive
+  // with a manually picked date (picking one clears the other).
+  const addDaysStr = n => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toLocaleDateString('en-CA');
+  };
+  const presetDay = filterPreset === 'today' ? today
+    : filterPreset === 'tomorrow' ? addDaysStr(1) : null;
+  const presetWeekEnd = filterPreset === 'week' ? addDaysStr(6) : null;
+
   const filtered = allBookings.filter(b => {
     // Hide past bookings unless a specific date is picked or "Show past" is checked
     if (!date && !showPast && b.date < today) return false;
     if (date && b.date !== date) return false;
+    if (presetDay && b.date !== presetDay) return false;
+    if (presetWeekEnd && (b.date < today || b.date > presetWeekEnd)) return false;
     if (court && String(b.court_id) !== court) return false;
     if (search) {
       const matchName = (b.name || '').toLowerCase().includes(search);
@@ -1053,6 +1146,11 @@ function applyFilters() {
   });
 
   renderTable(groupBookingsByRef(filtered));
+}
+
+function syncPresetChips() {
+  document.querySelectorAll('.filter-preset-chip').forEach(c =>
+    c.classList.toggle('active', c.dataset.preset === filterPreset));
 }
 
 // ─── EXCEL EXPORT ────────────────────────────────────────────────────────────
@@ -1082,7 +1180,10 @@ function downloadPastBookingsCSV() {
   ]);
 
   const escape = v => {
-    const s = String(v);
+    let s = String(v);
+    // Excel formula injection: neutralize leading =, @, or a sign that isn't
+    // starting a number (so phone numbers like +63… stay untouched).
+    if (/^[=@]/.test(s) || /^[+-](?!\d)/.test(s)) s = `'${s}`;
     return s.includes(',') || s.includes('"') || s.includes('\n')
       ? `"${s.replace(/"/g, '""')}"` : s;
   };
@@ -1168,17 +1269,18 @@ async function confirmDelete() {
 
 // ─── LOAD DATA ────────────────────────────────────────────────────────────────
 
-async function loadBookings() {
+// Placeholder rows in the table's shape while data loads — less layout jump
+// than a centered spinner. On phones the card layout renders them as blocks.
+function skeletonRowsHTML(rows = 6) {
+  const cells = Array.from({ length: 8 }, () => '<td><span class="skeleton"></span></td>').join('');
+  return Array.from({ length: rows }, () => `<tr class="skeleton-row">${cells}</tr>`).join('');
+}
+
+// silent=true refreshes data in the background without blanking the table
+// (used by the 60s auto-refresh poll).
+async function loadBookings(silent = false) {
   const tbody = document.getElementById('bookings-tbody');
-  tbody.innerHTML = `
-    <tr>
-      <td colspan="8">
-        <div class="loading-spinner">
-          <div class="spinner"></div>
-          Loading bookings…
-        </div>
-      </td>
-    </tr>`;
+  if (!silent) tbody.innerHTML = skeletonRowsHTML();
 
   const refreshBtn = document.getElementById('btn-refresh');
   if (refreshBtn) refreshBtn.classList.add('spinning');
@@ -1201,21 +1303,39 @@ async function loadBookings() {
     const updatedEl = document.getElementById('last-updated');
     if (updatedEl) updatedEl.textContent = `Updated ${formatLastUpdated()}`;
   } catch (e) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="8">
-          <div class="table-empty">
-            <div class="icon">⚠️</div>
-            <p>Failed to load bookings</p>
-            <div class="sub">Check your connection and try again</div>
-          </div>
-        </td>
-      </tr>`;
-    showToast(e.message || 'Error loading bookings.', true);
+    // A failed background refresh keeps the last good table instead of
+    // replacing it with an error state.
+    if (!silent) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8">
+            <div class="table-empty">
+              <div class="icon">⚠️</div>
+              <p>Failed to load bookings</p>
+              <div class="sub">Check your connection and try again</div>
+            </div>
+          </td>
+        </tr>`;
+      showToast(e.message || 'Error loading bookings.', true);
+    }
     console.error(e);
   } finally {
     if (refreshBtn) refreshBtn.classList.remove('spinning');
   }
+}
+
+// Keep bookings fresh without manual refreshes; skips ticks while the browser
+// tab is hidden so a backgrounded admin doesn't burn requests.
+function startBookingsAutoRefresh() {
+  if (bookingsAutoRefresh) return;
+  bookingsAutoRefresh = setInterval(() => {
+    if (document.hidden || !getToken()) return;
+    loadBookings(true);
+  }, 60000);
+}
+
+function stopBookingsAutoRefresh() {
+  if (bookingsAutoRefresh) { clearInterval(bookingsAutoRefresh); bookingsAutoRefresh = null; }
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -1232,11 +1352,13 @@ async function showAdmin() {
   populateCourtDropdowns();
   loadBookings();
   startChatHead();
+  startBookingsAutoRefresh();
 }
 
 function logout() {
   signOut();
   stopChatHead();
+  stopBookingsAutoRefresh();
   closeOrganizerChat();
   // Clear any per-row Open Play polling intervals — the admin app is only hidden
   // (DOM persists), so these would keep firing sbFetch after sign-out.
@@ -1350,12 +1472,23 @@ async function loadAnnouncement() {
   }
 }
 
+// True when the editor HTML holds real content: visible text (tags stripped,
+// &nbsp; collapsed) or embedded media — not just husks a contenteditable
+// leaves behind, like <br>, <div><br></div>, or &nbsp;.
+function announcementHasContent(html) {
+  if (!html) return false;
+  const probe = document.createElement('div');
+  probe.innerHTML = html;
+  if (probe.querySelector('img, video, iframe')) return true;
+  return probe.textContent.replace(/\u00A0/g, ' ').trim().length > 0;
+}
+
 function updateAnnouncementPreview() {
   const title = document.getElementById('announcement-title').value.trim();
   const contentEl = document.getElementById('announcement-content');
   const content = contentEl.innerHTML.trim();
   const preview = document.getElementById('announcement-preview');
-  if (!title && (!content || content === '<br>')) {
+  if (!title && !announcementHasContent(content)) {
     preview.style.display = 'none';
     return;
   }
@@ -1366,14 +1499,28 @@ function updateAnnouncementPreview() {
 
 async function saveAnnouncement() {
   const title = document.getElementById('announcement-title').value.trim();
-  const content = document.getElementById('announcement-content').innerHTML.trim();
+  const rawContent = document.getElementById('announcement-content').innerHTML.trim();
   const is_visible = document.getElementById('announcement-visible').checked;
   const btn = document.getElementById('btn-save-announcement');
   const statusEl = document.getElementById('announcement-status');
 
-  if (!title && !content) {
-    showToast('Please enter a title or content.', true);
-    return;
+  const hasContent = announcementHasContent(rawContent);
+  // Store '' instead of editor husks (<br>, <div><br></div>, &nbsp;) so the
+  // booking app never receives markup-only "content".
+  const content = hasContent ? rawContent : '';
+
+  if (!title && !hasContent) {
+    // Never allow a visible-but-empty announcement to reach users.
+    if (is_visible) {
+      showToast('Announcement is empty — add a title or content, or turn off "Visible to users" first.', true);
+      return;
+    }
+    // Hidden + empty on an existing row = deliberately clearing the board.
+    // With no row yet there is nothing to save.
+    if (!currentAnnouncementId) {
+      showToast('Please enter a title or content.', true);
+      return;
+    }
   }
 
   btn.disabled = true;
@@ -1726,7 +1873,7 @@ function renderLockMonthGrid() {
     const key = `${year}-${String(i + 1).padStart(2, '0')}`;
     const isPast = key < currentMonthKey;
     const isSelected = selectedLockMonths.has(key);
-    return `<button class="lock-month-btn${isSelected ? ' selected' : ''}${isPast ? ' past' : ''}" data-month="${key}">
+    return `<button class="lock-month-btn${isSelected ? ' selected' : ''}${isPast ? ' past' : ''}" data-month="${key}"${isPast ? ' disabled' : ''}>
       <span class="lock-month-name">${name}</span>
       <span class="lock-month-year">${year}</span>
     </button>`;
@@ -1982,7 +2129,15 @@ function isSessionPassed(s, now) {
 async function loadOpenPlay() {
   const container = document.getElementById('open-play-list');
   if (!container) return;
-  container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div>Loading…</div>';
+  // Re-rendering invalidates row state: leave select mode (opSelectedIds would
+  // keep ids whose fresh checkboxes render unticked, so "Delete Selected"
+  // could remove sessions that no longer look selected) and stop per-row
+  // polls before their DOM nodes are detached, or the intervals run forever.
+  if (opSelectMode) exitSelectMode();
+  container.querySelectorAll('.op-session-row').forEach(row => {
+    if (row._opPoll) { clearInterval(row._opPoll); row._opPoll = null; }
+  });
+  container.innerHTML = '<div class="op-skeleton"></div>'.repeat(3);
   try {
     const sessions = await fetchAllOpenPlaySessions();
     const now = new Date();
@@ -2193,8 +2348,13 @@ function confirmRemovePlayer(playerName, onConfirm) {
   const confirmBtn = document.getElementById('op-remove-player-confirm');
   const cancelBtn = document.getElementById('op-remove-player-cancel');
 
+  // Named handler so close() can detach it: with { once: true } any click
+  // inside the card would consume the listener and kill backdrop-close.
+  function onBackdrop(e) { if (e.target === modal) close(); }
+
   function close() {
     modal.classList.remove('show');
+    modal.removeEventListener('click', onBackdrop);
     confirmBtn.replaceWith(confirmBtn.cloneNode(true));
     cancelBtn.replaceWith(cancelBtn.cloneNode(true));
   }
@@ -2204,7 +2364,7 @@ function confirmRemovePlayer(playerName, onConfirm) {
     onConfirm();
   });
   document.getElementById('op-remove-player-cancel').addEventListener('click', close);
-  modal.addEventListener('click', e => { if (e.target === modal) close(); }, { once: true });
+  modal.addEventListener('click', onBackdrop);
 }
 
 async function deleteSessionRow(row) {
@@ -2213,6 +2373,7 @@ async function deleteSessionRow(row) {
   confirmDeleteSession(async () => {
     try {
       await softDeleteOpenPlaySession(id);
+      if (row._opPoll) { clearInterval(row._opPoll); row._opPoll = null; }
       row.remove();
       const container = document.getElementById('open-play-list');
       if (!container.querySelector('.op-session-row')) {
@@ -2231,8 +2392,12 @@ function confirmDeleteSession(onConfirm) {
   const confirmBtn = document.getElementById('op-delete-session-confirm');
   const cancelBtn = document.getElementById('op-delete-session-cancel');
 
+  // Named handler so close() can detach it (see confirmRemovePlayer).
+  function onBackdrop(e) { if (e.target === modal) close(); }
+
   function close() {
     modal.classList.remove('show');
+    modal.removeEventListener('click', onBackdrop);
     confirmBtn.replaceWith(confirmBtn.cloneNode(true));
     cancelBtn.replaceWith(cancelBtn.cloneNode(true));
   }
@@ -2242,7 +2407,7 @@ function confirmDeleteSession(onConfirm) {
     onConfirm();
   });
   document.getElementById('op-delete-session-cancel').addEventListener('click', close);
-  modal.addEventListener('click', e => { if (e.target === modal) close(); }, { once: true });
+  modal.addEventListener('click', onBackdrop);
 }
 
 function escHtml(s) {
@@ -2369,6 +2534,10 @@ function openOrganizerChat(sessionId) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay show';
   overlay.id = 'org-chat-modal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Session chat');
+  modalFocusStack.push(document.activeElement);
   overlay.innerHTML = `
     <div class="modal-card" style="max-width:440px;width:92%;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -2396,6 +2565,7 @@ function openOrganizerChat(sessionId) {
   overlay.querySelector('#org-chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
   overlay.querySelector('#org-chat-input').addEventListener('input', () => sendOrganizerTyping(sessionId));
   overlay.querySelector('#org-chat-scroll').addEventListener('click', e => onOrgChatClick(e, sessionId));
+  overlay.querySelector('#org-chat-input').focus();
   renderOrganizerChat(sessionId);
   orgChatPoll = setInterval(() => renderOrganizerChat(sessionId), 4000);
   orgTypingPoll = setInterval(async () => {
@@ -2447,7 +2617,10 @@ function closeOrganizerChat() {
   if (orgChatPoll) { clearInterval(orgChatPoll); orgChatPoll = null; }
   if (orgTypingPoll) { clearInterval(orgTypingPoll); orgTypingPoll = null; }
   const ex = document.getElementById('org-chat-modal');
-  if (ex) ex.remove();
+  if (ex) {
+    ex.remove();
+    restoreModalFocus();
+  }
 }
 let orgChatData = { msgs: [], reactions: {} };
 let orgChatOpenPicker = null; // message id whose emoji picker is open
@@ -2499,18 +2672,31 @@ function paintOrganizerChat() {
   const el = document.getElementById('org-chat-scroll'); if (!el) return;
   const { msgs, reactions } = orgChatData;
   const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-  el.innerHTML = msgs.map(m => {
+  let lastDay = null;
+  let html = '';
+  for (const m of msgs) {
+    const ts = m.created_at ? new Date(m.created_at) : null;
+    const day = ts ? ts.toLocaleDateString('en-CA') : null;
+    if (day && day !== lastDay) {
+      lastDay = day;
+      const label = day === todayStr() ? 'Today' : fmtDateLabel(day);
+      html += `<div class="chat-day-divider"><span>${label}</span></div>`;
+    }
+    const time = ts
+      ? ts.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : '';
     const who = m.is_organizer ? 'Organizer' : (m.sender_name || 'Player');
     const align = m.is_organizer ? 'flex-end' : 'flex-start';
     const img = m.image_url
       ? `<img src="${escHtml(m.image_url)}" class="org-chat-img" data-full="${escHtml(m.image_url)}" style="max-width:180px;border-radius:8px;display:block;margin-top:4px;cursor:zoom-in;">`
       : '';
-    return `<div class="org-chat-msg" style="display:flex;flex-direction:column;align-items:${align};margin-bottom:8px;">
-      <div style="font-size:0.68rem;color:#888;">${escHtml(who)}</div>
+    html += `<div class="org-chat-msg" style="display:flex;flex-direction:column;align-items:${align};margin-bottom:8px;">
+      <div style="font-size:0.68rem;color:#888;">${escHtml(who)}${time ? ` · ${time}` : ''}</div>
       <div style="max-width:80%;background:${m.is_organizer ? '#e8f0fe' : '#f1f1f1'};border-radius:10px;padding:6px 10px;font-size:0.85rem;word-break:break-word;">${m.body ? escHtml(m.body) : ''}${img}</div>
       ${m.id ? reactionRowHTML(m.id, reactions, ORGANIZER_TOKEN) : ''}
     </div>`;
-  }).join('') || '<div style="text-align:center;color:#aaa;padding:1rem;">No messages yet.</div>';
+  }
+  el.innerHTML = html || '<div style="text-align:center;color:#aaa;padding:1rem;">No messages yet.</div>';
   if (nearBottom || !el.dataset.painted) el.scrollTop = el.scrollHeight;
   el.dataset.painted = '1';
 }
@@ -2567,17 +2753,25 @@ async function refreshChatHead() {
   renderChatHead();
 }
 
+// Mirror the unread total in the browser tab title so messages are noticeable
+// even when the admin panel sits in a background tab.
+function updateTabTitle(unread) {
+  document.title = unread > 0 ? `(${unread > 99 ? '99+' : unread}) ${BASE_TITLE}` : BASE_TITLE;
+}
+
 function renderChatHead() {
   const head = document.getElementById('chat-head');
   if (!head) return;
   const loggedIn = document.getElementById('admin-app')?.classList.contains('visible');
   if (!loggedIn || chatHeadSessions.length === 0) {
     head.style.display = 'none';
+    updateTabTitle(0);
     return;
   }
   head.style.display = 'block';
 
   const totalUnread = Object.values(chatHeadUnread).reduce((a, b) => a + b, 0);
+  updateTabTitle(totalUnread);
   const badge = document.getElementById('chat-head-badge');
   badge.style.display = totalUnread > 0 ? 'flex' : 'none';
   badge.textContent = totalUnread > 99 ? '99+' : totalUnread;
@@ -2618,6 +2812,78 @@ function stopChatHead() {
   chatHeadUnread = {};
   chatHeadListOpen = false;
   renderChatHead();
+}
+
+// ─── MODAL ACCESSIBILITY ─────────────────────────────────────────────────────
+// Shared focus handling for every .modal-overlay dialog (including the
+// dynamically created chat modal): focus moves into a modal when it opens,
+// Tab cycles inside it, Escape closes the top-most layer, and focus returns
+// to the element that opened it.
+
+const modalFocusStack = [];
+
+function topModal() {
+  const receipt = document.getElementById('receipt-modal');
+  if (receipt?.classList.contains('show')) return receipt; // z-index 1100 — always top
+  const chat = document.getElementById('org-chat-modal');
+  if (chat) return chat;
+  const shown = document.querySelectorAll('.modal-overlay.show');
+  return shown.length ? shown[shown.length - 1] : null;
+}
+
+function focusFirstIn(modal) {
+  const el = modal.querySelector(
+    'input:not([type="hidden"]):not(:disabled), select, textarea, button:not(:disabled)');
+  (el || modal).focus();
+}
+
+function restoreModalFocus() {
+  const prev = modalFocusStack.pop();
+  if (prev?.isConnected && prev.offsetParent !== null) prev.focus();
+}
+
+function initModalA11y() {
+  // Trap Tab inside the top-most open modal.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const modal = topModal();
+    if (!modal) return;
+    const list = [...modal.querySelectorAll(
+      'input:not([type="hidden"]), select, textarea, button, [href], [tabindex]:not([tabindex="-1"])',
+    )].filter(el => !el.disabled && el.offsetParent !== null);
+    if (!list.length) return;
+    const first = list[0];
+    const last = list[list.length - 1];
+    if (e.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
+  // Watch the static overlays' show/hide class flips to move focus in and out
+  // and stamp dialog semantics. (The chat modal is created already-shown, so
+  // openOrganizerChat/closeOrganizerChat handle their own focus.)
+  new MutationObserver(muts => {
+    for (const m of muts) {
+      const el = m.target;
+      if (!(el instanceof HTMLElement) || !el.classList.contains('modal-overlay')) continue;
+      const wasShown = (m.oldValue || '').split(/\s+/).includes('show');
+      const isShown = el.classList.contains('show');
+      if (isShown && !wasShown) {
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        modalFocusStack.push(document.activeElement);
+        focusFirstIn(el);
+      } else if (!isShown && wasShown) {
+        restoreModalFocus();
+      }
+    }
+  }).observe(document.body, {
+    subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true,
+  });
 }
 
 // ─── COURTS MANAGEMENT ────────────────────────────────────────────────────────
@@ -2725,7 +2991,7 @@ function renderCourtsTab() {
         renderCourtsTab();
         showToast(`Court ${currentlyActive ? 'deactivated' : 'activated'}.`);
       } catch (e) {
-        showToast('Failed to update court.');
+        showToast('Failed to update court.', true);
         btn.disabled = false;
       }
     });
@@ -2912,32 +3178,32 @@ function renderApp() {
         <div class="tab-nav">
           <button class="tab-btn active" data-tab="bookings">
             <span class="tab-icon">📋</span>
-            Bookings
+            <span class="tab-label">Bookings</span>
             <span class="tab-badge" id="tab-bookings-badge">0</span>
           </button>
           <button class="tab-btn" data-tab="revenue">
             <span class="tab-icon">💰</span>
-            Revenue
+            <span class="tab-label">Revenue</span>
           </button>
           <button class="tab-btn" data-tab="announcements">
             <span class="tab-icon">📢</span>
-            Announcements
+            <span class="tab-label">Announcements</span>
           </button>
           <button class="tab-btn" data-tab="locks">
             <span class="tab-icon">🔒</span>
-            Court Lock
+            <span class="tab-label">Court Lock</span>
           </button>
           <button class="tab-btn" data-tab="open-play">
             <span class="tab-icon">🏃</span>
-            Open Play
+            <span class="tab-label">Open Play</span>
           </button>
           <button class="tab-btn" data-tab="courts">
             <span class="tab-icon">🏓</span>
-            Courts
+            <span class="tab-label">Courts</span>
           </button>
           <button class="tab-btn" data-tab="pricing">
             <span class="tab-icon">💵</span>
-            Pricing
+            <span class="tab-label">Pricing</span>
           </button>
         </div>
 
@@ -2986,6 +3252,14 @@ function renderApp() {
               <select id="filter-court">
                 <option value="">All Courts</option>
               </select>
+            </div>
+            <div class="filter-group" style="flex:0 1 auto">
+              <label>Quick Filter</label>
+              <div class="filter-presets">
+                <button class="filter-preset-chip" data-preset="today">Today</button>
+                <button class="filter-preset-chip" data-preset="tomorrow">Tomorrow</button>
+                <button class="filter-preset-chip" data-preset="week">This Week</button>
+              </div>
             </div>
             <label class="filter-checkbox">
               <input type="checkbox" id="filter-show-past" />
@@ -3041,6 +3315,14 @@ function renderApp() {
               <span><strong id="revenue-op-players">0</strong> open play players</span>
             </div>
           </div>
+
+          <div class="section-title" style="margin-top:1.5rem">Daily Trend
+            <span class="rev-trend-toggle">
+              <button class="rev-trend-btn active" data-days="7">7d</button>
+              <button class="rev-trend-btn" data-days="30">30d</button>
+            </span>
+          </div>
+          <div class="rev-trend-card" id="rev-trend-chart"></div>
 
           <div class="section-title" style="margin-top:1.5rem">By Court</div>
           <div class="revenue-grid" id="revenue-court-cards"></div>
@@ -3315,10 +3597,27 @@ function renderApp() {
       <div class="modal-card">
         <div class="modal-icon">🗑️</div>
         <h2>Delete Session?</h2>
-        <p>This session will be hidden. Existing registrations are kept.</p>
+        <p>This permanently deletes the session — its chats, receipt images, and player registrations are erased from the database within the hour. Revenue already collected stays counted. This cannot be undone.</p>
         <div class="modal-actions">
           <button class="btn-cancel-modal" id="op-delete-session-cancel">Keep Session</button>
           <button class="btn-confirm-delete" id="op-delete-session-confirm">Yes, Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk Delete Open Play Sessions Modal -->
+    <div class="modal-overlay" id="op-bulk-delete-modal">
+      <div class="modal-card">
+        <div class="modal-icon">🗑️</div>
+        <h2>Delete Multiple Sessions?</h2>
+        <p id="op-bulk-delete-summary"></p>
+        <label class="bulk-ack">
+          <input type="checkbox" id="op-bulk-delete-ack" />
+          <span>I understand this is permanent and cannot be undone.</span>
+        </label>
+        <div class="modal-actions">
+          <button class="btn-cancel-modal" id="op-bulk-delete-cancel">Cancel</button>
+          <button class="btn-confirm-delete" id="op-bulk-delete-confirm" disabled>Yes, Delete All</button>
         </div>
       </div>
     </div>
@@ -3525,22 +3824,39 @@ function renderApp() {
 
   // Filters
   document.getElementById('filter-search').addEventListener('input', applyFilters);
-  document.getElementById('filter-date').addEventListener('change', applyFilters);
+  document.getElementById('filter-date').addEventListener('change', () => {
+    // A manually picked date replaces any quick-filter chip.
+    if (document.getElementById('filter-date').value && filterPreset) {
+      filterPreset = null;
+      syncPresetChips();
+    }
+    applyFilters();
+  });
   document.getElementById('filter-court').addEventListener('change', applyFilters);
   document.getElementById('filter-show-past').addEventListener('change', applyFilters);
+  document.querySelectorAll('.filter-preset-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      filterPreset = filterPreset === chip.dataset.preset ? null : chip.dataset.preset;
+      if (filterPreset) document.getElementById('filter-date').value = '';
+      syncPresetChips();
+      applyFilters();
+    });
+  });
   document.getElementById('btn-reset-filters').addEventListener('click', () => {
     document.getElementById('filter-search').value = '';
     document.getElementById('filter-date').value = '';
     document.getElementById('filter-court').value = '';
     document.getElementById('filter-show-past').checked = false;
+    filterPreset = null;
+    syncPresetChips();
     applyFilters();
   });
 
   // Export past bookings
   document.getElementById('btn-export-csv').addEventListener('click', downloadPastBookingsCSV);
 
-  // Refresh
-  document.getElementById('btn-refresh').addEventListener('click', loadBookings);
+  // Refresh (wrapped so the click event isn't passed as the `silent` param)
+  document.getElementById('btn-refresh').addEventListener('click', () => loadBookings());
 
   // Tab navigation
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -3554,6 +3870,16 @@ function renderApp() {
       btn.classList.add('active');
       currentRevenuePeriod = btn.dataset.period;
       updateRevenue();
+    });
+  });
+
+  // Daily trend window toggle (7d / 30d)
+  document.querySelectorAll('.rev-trend-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.rev-trend-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      revTrendDays = parseInt(btn.dataset.days);
+      renderRevenueTrend();
     });
   });
 
@@ -3669,9 +3995,20 @@ function renderApp() {
     if (e.target === e.currentTarget) closeReceiptModal();
   });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && document.getElementById('receipt-modal').classList.contains('show')) {
+    if (e.key !== 'Escape') return;
+    // Receipt viewer stacks on top of the chat modal — close top-most first.
+    if (document.getElementById('receipt-modal').classList.contains('show')) {
       closeReceiptModal();
+      return;
     }
+    if (document.getElementById('org-chat-modal')) {
+      closeOrganizerChat();
+      return;
+    }
+    // Any other open overlay: reuse its own backdrop-close handler (safe
+    // cancel path) by dispatching a click targeted at the overlay itself.
+    const top = topModal();
+    if (top) top.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
 
   // Delete lock modal
@@ -3690,3 +4027,4 @@ function renderApp() {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 
 renderApp();
+initModalA11y();
